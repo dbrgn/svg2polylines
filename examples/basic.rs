@@ -1,4 +1,4 @@
-extern crate svg2coordinates;
+extern crate svg2polylines;
 
 use std::env;
 use std::fs;

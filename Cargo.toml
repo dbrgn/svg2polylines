@@ -1,5 +1,5 @@
 [package]
-name = "svg2coordinates"
+name = "svg2polylines"
 version = "0.1.0"
 authors = ["Danilo Bargen <mail@dbrgn.ch>"]
 
