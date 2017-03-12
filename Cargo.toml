@@ -1,0 +1,7 @@
+[package]
+name = "svg2coordinates"
+version = "0.1.0"
+authors = ["Danilo Bargen <mail@dbrgn.ch>"]
+
+[dependencies]
+svgparser = "0.3"
