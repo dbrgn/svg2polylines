@@ -15,6 +15,7 @@ struct CurrentLine {
     line: Polyline,
 }
 
+/// Simple data structure that acts as a Polyline buffer.
 impl CurrentLine {
     fn new() -> Self {
         CurrentLine { line: Polyline::new() }
@@ -140,6 +141,10 @@ pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
 
 #[cfg(test)]
 mod tests {
+    extern crate svgparser;
+
+    use svgparser::path::SegmentData;
+
     use super::*;
 
     #[test]
@@ -161,6 +166,94 @@ mod tests {
         assert_eq!(finished[0], (1.0, 2.0));
         assert_eq!(finished[1], (2.0, 3.0));
         assert_eq!(line.is_valid(), false);
+    }
+
+    #[test]
+    /// Parse segment data with a single MoveTo and three coordinates
+    fn test_parse_segment_data() {
+        let mut current_line = CurrentLine::new();
+        let mut lines = Vec::new();
+        parse_segment_data(&SegmentData::MoveTo {
+            x: 1.0,
+            y: 2.0,
+        }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::LineTo {
+            x: 2.0,
+            y: 3.0,
+        }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::LineTo {
+            x: 3.0,
+            y: 2.0,
+        }, &mut current_line, &mut lines).unwrap();
+        assert_eq!(lines.len(), 0);
+        let finished = current_line.finish();
+        assert_eq!(lines.len(), 0);
+        assert_eq!(finished.len(), 3);
+        assert_eq!(finished[0], (1.0, 2.0));
+        assert_eq!(finished[1], (2.0, 3.0));
+        assert_eq!(finished[2], (3.0, 2.0));
+    }
+
+    #[test]
+    /// Parse segment data with HorizontalLineTo / VerticalLineTo entries
+    fn test_parse_segment_data_horizontal_vertical() {
+        let mut current_line = CurrentLine::new();
+        let mut lines = Vec::new();
+        parse_segment_data(&SegmentData::MoveTo {
+            x: 1.0,
+            y: 2.0,
+        }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::HorizontalLineTo {
+            x: 3.0,
+        }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::VerticalLineTo {
+            y: -1.0,
+        }, &mut current_line, &mut lines).unwrap();
+        assert_eq!(lines.len(), 0);
+        let finished = current_line.finish();
+        assert_eq!(lines.len(), 0);
+        assert_eq!(finished.len(), 3);
+        assert_eq!(finished[0], (1.0, 2.0));
+        assert_eq!(finished[1], (3.0, 2.0));
+        assert_eq!(finished[2], (3.0, -1.0));
+    }
+
+    #[test]
+    /// Parse segment data with HorizontalLineTo / VerticalLineTo entries
+    fn test_parse_segment_data_unsupported() {
+        let mut current_line = CurrentLine::new();
+        let mut lines = Vec::new();
+        parse_segment_data(&SegmentData::MoveTo {
+            x: 1.0,
+            y: 2.0,
+        }, &mut current_line, &mut lines).unwrap();
+        let result = parse_segment_data(&SegmentData::SmoothQuadratic {
+            x: 3.0,
+            y: 4.0,
+        }, &mut current_line, &mut lines);
+        assert!(result.is_err());
+        assert_eq!(lines.len(), 0);
+        let finished = current_line.finish();
+        assert_eq!(finished.len(), 1);
+        assert_eq!(finished[0], (1.0, 2.0));
+    }
+
+    #[test]
+    /// Parse segment data with multiple MoveTo commands
+    fn test_parse_segment_data_multiple() {
+        let mut current_line = CurrentLine::new();
+        let mut lines = Vec::new();
+        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 2.0, }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(current_line.is_valid(), false);
+        let finished = current_line.finish();
+        assert_eq!(finished.len(), 1);
     }
 
 }
