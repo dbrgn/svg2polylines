@@ -61,22 +61,22 @@ fn parse_segment_data(data: &SegmentData,
                       current_line: &mut CurrentLine,
                       lines: &mut Vec<Polyline>) -> Result<(), String> {
     match data {
-        &MoveTo { x: x, y: y } => {
+        &MoveTo { x, y } => {
             if current_line.is_valid() {
                 lines.push(current_line.finish());
             }
             current_line.add((x, y));
         },
-        &LineTo { x: x, y: y } => {
+        &LineTo { x, y } => {
             current_line.add((x, y));
         },
-        &HorizontalLineTo { x: x } => {
+        &HorizontalLineTo { x } => {
             match current_line.last_y() {
                 Some(y) => current_line.add((x, y)),
                 None => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
             }
         },
-        &VerticalLineTo { y: y } => {
+        &VerticalLineTo { y } => {
             match current_line.last_x() {
                 Some(x) => current_line.add((x, y)),
                 None => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
