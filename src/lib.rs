@@ -3,20 +3,40 @@ extern crate svgparser;
 use std::str;
 
 use svgparser::{svg, path, Stream};
+use svgparser::path::SegmentData::{MoveTo, LineTo, HorizontalLineTo, VerticalLineTo};
 
-fn parse_path(data: Stream) -> Vec<path::Segment> {
+pub type CoordinatePair = (f64, f64);
+pub type Polyline = Vec<CoordinatePair>;
+
+fn parse_path(data: Stream) -> Vec<Polyline> {
     println!("New path:");
 
-    let mut tokens = Vec::new();
+    let mut lines = Vec::new();
 
     let mut p = path::Tokenizer::new(data);
+    let mut line = Polyline::new();
     loop {
         match p.parse_next() {
             Ok(segment_token) => {
                 match segment_token {
                     path::SegmentToken::Segment(segment) => {
-                        tokens.push(segment);
                         println!("  {:?}", segment);
+                        match segment.data {
+                            MoveTo { x: x, y: y } => {
+                                if line.len() > 1 {
+                                    println!("Line done: {:?}", line);
+                                    lines.push(line);
+                                }
+                                line = Polyline::new();
+                                line.push((x, y));
+                            },
+                            LineTo { x: x, y: y } => {
+                                line.push((x, y));
+                            },
+                            d @ _ => {
+                                println!("Unsupported segment data: {:?}", d);
+                            }
+                        }
                     },
                     path::SegmentToken::EndOfStream => break,
                 }
@@ -28,24 +48,22 @@ fn parse_path(data: Stream) -> Vec<path::Segment> {
         }
     }
 
-    tokens
+    lines
 }
 
-pub fn parse(svg: &str) {
+pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
     let bytes = svg.as_bytes();
 
-    let mut paths = Vec::new();
-
-    let mut p = svg::Tokenizer::new(&bytes);
+    let mut polylines = Vec::new();
+    let mut tokenizer = svg::Tokenizer::new(&bytes);
     loop {
-        match p.parse_next() {
+        match tokenizer.parse_next() {
             Ok(t) => {
                 match t {
                     svg::Token::Attribute(name, value) => {
                         // Process only 'd' attributes
                         if name == b"d" {
-                            let segments = parse_path(value);
-                            paths.push(segments);
+                            polylines.extend(parse_path(value));
                         }
                     },
                     svg::Token::EndOfStream => break,
@@ -54,12 +72,12 @@ pub fn parse(svg: &str) {
             },
             Err(e) => {
                 println!("Error: {:?}", e);
-                return;
+                return Err(e.to_string());
             }
         }
     }
 
-    //println!("{:?}", paths);
+    Ok(polylines)
 }
 
 #[cfg(test)]
