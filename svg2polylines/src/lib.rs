@@ -1,6 +1,5 @@
 #[macro_use] extern crate log;
 extern crate svgparser;
-extern crate libc;
 
 use std::convert;
 use std::mem;

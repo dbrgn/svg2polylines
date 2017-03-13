@@ -1,0 +1,12 @@
+[package]
+name = "svg2polylines-ffi"
+version = "0.1.0"
+authors = ["Danilo Bargen <mail@dbrgn.ch>"]
+
+[lib]
+name = "svg2polylines"
+crate_type = ["dylib"]
+
+[dependencies]
+svg2polylines = { path = "../svg2polylines" }
+libc = "^0.2"

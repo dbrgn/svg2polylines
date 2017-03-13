@@ -6,7 +6,6 @@ authors = ["Danilo Bargen <mail@dbrgn.ch>"]
 [dependencies]
 svgparser = "^0.3"
 log = "^0.3"
-libc = "^0.2"
 
 [dev-dependencies]
 env_logger = "^0.4"
