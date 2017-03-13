@@ -32,20 +32,12 @@ impl CurrentLine {
 
     /// Return the last x coordinate (if the line is not empty).
     fn last_x(&self) -> Option<f64> {
-        if self.line.len() > 0 {
-            Some (self.line[0].0)
-        } else {
-            None
-        }
+        self.line.last().map(|pair| pair.0)
     }
     
     /// Return the last y coordinate (if the line is not empty).
     fn last_y(&self) -> Option<f64> {
-        if self.line.len() > 0 {
-            Some (self.line[0].1)
-        } else {
-            None
-        }
+        self.line.last().map(|pair| pair.1)
     }
 
     /// Replace the internal polyline with a new instance and return the
@@ -148,7 +140,27 @@ pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn it_works() {
+    fn test_current_line() {
+        let mut line = CurrentLine::new();
+        assert_eq!(line.is_valid(), false);
+        assert_eq!(line.last_x(), None);
+        assert_eq!(line.last_y(), None);
+        line.add((1.0, 2.0));
+        assert_eq!(line.is_valid(), false);
+        assert_eq!(line.last_x(), Some(1.0));
+        assert_eq!(line.last_y(), Some(2.0));
+        line.add((2.0, 3.0));
+        assert_eq!(line.is_valid(), true);
+        assert_eq!(line.last_x(), Some(2.0));
+        assert_eq!(line.last_y(), Some(3.0));
+        let finished = line.finish();
+        assert_eq!(finished.len(), 2);
+        assert_eq!(finished[0], (1.0, 2.0));
+        assert_eq!(finished[1], (2.0, 3.0));
+        assert_eq!(line.is_valid(), false);
     }
+
 }
