@@ -30,6 +30,24 @@ impl CurrentLine {
         self.line.len() > 1
     }
 
+    /// Return the last x coordinate (if the line is not empty).
+    fn last_x(&self) -> Option<f64> {
+        if self.line.len() > 0 {
+            Some (self.line[0].0)
+        } else {
+            None
+        }
+    }
+    
+    /// Return the last y coordinate (if the line is not empty).
+    fn last_y(&self) -> Option<f64> {
+        if self.line.len() > 0 {
+            Some (self.line[0].1)
+        } else {
+            None
+        }
+    }
+
     /// Replace the internal polyline with a new instance and return the
     /// previously stored polyline.
     fn finish(&mut self) -> Polyline {
@@ -41,7 +59,7 @@ impl CurrentLine {
 
 fn parse_segment_data(data: &SegmentData,
                       current_line: &mut CurrentLine,
-                      lines: &mut Vec<Polyline>) {
+                      lines: &mut Vec<Polyline>) -> Result<(), String> {
     match data {
         &MoveTo { x: x, y: y } => {
             if current_line.is_valid() {
@@ -52,10 +70,23 @@ fn parse_segment_data(data: &SegmentData,
         &LineTo { x: x, y: y } => {
             current_line.add((x, y));
         },
+        &HorizontalLineTo { x: x } => {
+            match current_line.last_y() {
+                Some(y) => current_line.add((x, y)),
+                None => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
+            }
+        },
+        &VerticalLineTo { y: y } => {
+            match current_line.last_x() {
+                Some(x) => current_line.add((x, y)),
+                None => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
+            }
+        },
         d @ _ => {
-            println!("Unsupported segment data: {:?}", d);
+            return Err(format!("Unsupported segment data: {:?}", d));
         }
     }
+    Ok(())
 }
 
 fn parse_path(data: Stream) -> Vec<Polyline> {
@@ -71,7 +102,7 @@ fn parse_path(data: Stream) -> Vec<Polyline> {
                 match segment_token {
                     path::SegmentToken::Segment(segment) => {
                         debug!("  Segment data: {:?}", segment.data);
-                        parse_segment_data(&segment.data, &mut line, &mut lines);
+                        parse_segment_data(&segment.data, &mut line, &mut lines).unwrap();
                     },
                     path::SegmentToken::EndOfStream => break,
                 }
