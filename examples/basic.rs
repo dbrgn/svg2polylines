@@ -1,3 +1,4 @@
+extern crate env_logger;
 extern crate svg2polylines;
 
 use std::env;
@@ -8,6 +9,8 @@ use std::process::exit;
 use svg2polylines::Polyline;
 
 fn main() {
+    env_logger::init().expect("Could not initialize env logger");
+
     let args: Vec<_> = env::args().collect();
     match args.len() {
         2 => {},

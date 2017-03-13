@@ -1,3 +1,4 @@
+#[macro_use] extern crate log;
 extern crate svgparser;
 
 use std::str;
@@ -9,7 +10,7 @@ pub type CoordinatePair = (f64, f64);
 pub type Polyline = Vec<CoordinatePair>;
 
 fn parse_path(data: Stream) -> Vec<Polyline> {
-    println!("New path:");
+    debug!("New path");
 
     let mut lines = Vec::new();
 
@@ -20,11 +21,10 @@ fn parse_path(data: Stream) -> Vec<Polyline> {
             Ok(segment_token) => {
                 match segment_token {
                     path::SegmentToken::Segment(segment) => {
-                        println!("  {:?}", segment);
+                        debug!("  Segment data: {:?}", segment.data);
                         match segment.data {
                             MoveTo { x: x, y: y } => {
                                 if line.len() > 1 {
-                                    println!("Line done: {:?}", line);
                                     lines.push(line);
                                 }
                                 line = Polyline::new();
@@ -42,7 +42,7 @@ fn parse_path(data: Stream) -> Vec<Polyline> {
                 }
             },
             Err(e) => {
-                println!("Warning: {:?}", e);
+                warn!("Invalid path segment: {:?}", e);
                 break;
             },
         }
