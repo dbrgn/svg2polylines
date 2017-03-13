@@ -11,7 +11,3 @@ straight lines and liftoff / drop pen commands.
 Signature:
 
     fn svg2polylines::parse(&str) -> Result<Vec<Polyline>>;
-
-...with the following type definition:
-
-    type Polyline = Vec<(f64, f64)>;

@@ -1,16 +1,35 @@
 #[macro_use] extern crate log;
 extern crate svgparser;
 
-use std::str;
+use std::convert;
 use std::mem;
+use std::str;
 
 use svgparser::{svg, path, Stream};
 use svgparser::path::SegmentData::{self, MoveTo, LineTo, HorizontalLineTo, VerticalLineTo};
 
-pub type CoordinatePair = (f64, f64);
+
+#[derive(Debug, PartialEq)]
+pub struct CoordinatePair {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl CoordinatePair {
+    fn new(x: f64, y: f64) -> Self {
+        CoordinatePair { x: x, y: y }
+    }
+}
+
+impl convert::From<(f64, f64)> for CoordinatePair {
+    fn from(val: (f64, f64)) -> CoordinatePair {
+        CoordinatePair { x: val.0, y: val.1 }
+    }
+}
+
 pub type Polyline = Vec<CoordinatePair>;
 
-
+#[derive(Debug, PartialEq)]
 struct CurrentLine {
     line: Polyline,
 }
@@ -33,12 +52,12 @@ impl CurrentLine {
 
     /// Return the last x coordinate (if the line is not empty).
     fn last_x(&self) -> Option<f64> {
-        self.line.last().map(|pair| pair.0)
+        self.line.last().map(|pair| pair.x)
     }
     
     /// Return the last y coordinate (if the line is not empty).
     fn last_y(&self) -> Option<f64> {
-        self.line.last().map(|pair| pair.1)
+        self.line.last().map(|pair| pair.y)
     }
 
     /// Replace the internal polyline with a new instance and return the
@@ -58,20 +77,20 @@ fn parse_segment_data(data: &SegmentData,
             if current_line.is_valid() {
                 lines.push(current_line.finish());
             }
-            current_line.add((x, y));
+            current_line.add(CoordinatePair::new(x, y));
         },
         &LineTo { x, y } => {
-            current_line.add((x, y));
+            current_line.add(CoordinatePair::new(x, y));
         },
         &HorizontalLineTo { x } => {
             match current_line.last_y() {
-                Some(y) => current_line.add((x, y)),
+                Some(y) => current_line.add(CoordinatePair::new(x, y)),
                 None => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
             }
         },
         &VerticalLineTo { y } => {
             match current_line.last_x() {
-                Some(x) => current_line.add((x, y)),
+                Some(x) => current_line.add(CoordinatePair::new(x, y)),
                 None => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
             }
         },
@@ -153,18 +172,18 @@ mod tests {
         assert_eq!(line.is_valid(), false);
         assert_eq!(line.last_x(), None);
         assert_eq!(line.last_y(), None);
-        line.add((1.0, 2.0));
+        line.add((1.0, 2.0).into());
         assert_eq!(line.is_valid(), false);
         assert_eq!(line.last_x(), Some(1.0));
         assert_eq!(line.last_y(), Some(2.0));
-        line.add((2.0, 3.0));
+        line.add((2.0, 3.0).into());
         assert_eq!(line.is_valid(), true);
         assert_eq!(line.last_x(), Some(2.0));
         assert_eq!(line.last_y(), Some(3.0));
         let finished = line.finish();
         assert_eq!(finished.len(), 2);
-        assert_eq!(finished[0], (1.0, 2.0));
-        assert_eq!(finished[1], (2.0, 3.0));
+        assert_eq!(finished[0], (1.0, 2.0).into());
+        assert_eq!(finished[1], (2.0, 3.0).into());
         assert_eq!(line.is_valid(), false);
     }
 
@@ -189,9 +208,9 @@ mod tests {
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
         assert_eq!(finished.len(), 3);
-        assert_eq!(finished[0], (1.0, 2.0));
-        assert_eq!(finished[1], (2.0, 3.0));
-        assert_eq!(finished[2], (3.0, 2.0));
+        assert_eq!(finished[0], (1.0, 2.0).into());
+        assert_eq!(finished[1], (2.0, 3.0).into());
+        assert_eq!(finished[2], (3.0, 2.0).into());
     }
 
     #[test]
@@ -213,9 +232,9 @@ mod tests {
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
         assert_eq!(finished.len(), 3);
-        assert_eq!(finished[0], (1.0, 2.0));
-        assert_eq!(finished[1], (3.0, 2.0));
-        assert_eq!(finished[2], (3.0, -1.0));
+        assert_eq!(finished[0], (1.0, 2.0).into());
+        assert_eq!(finished[1], (3.0, 2.0).into());
+        assert_eq!(finished[2], (3.0, -1.0).into());
     }
 
     #[test]
@@ -235,7 +254,7 @@ mod tests {
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(finished.len(), 1);
-        assert_eq!(finished[0], (1.0, 2.0));
+        assert_eq!(finished[0], (1.0, 2.0).into());
     }
 
     #[test]
