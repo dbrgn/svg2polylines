@@ -13,7 +13,7 @@ use svg2polylines::{CoordinatePair, parse};
 pub extern fn svg_str_to_polylines(
     svg: *const c_char,
     out_vec: *const *const CoordinatePair,
-    mut out_vec_len: *const usize,
+    out_vec_len: *mut usize,
 ) -> u8 {
 
     // Convert C string to Rust string
@@ -28,9 +28,9 @@ pub extern fn svg_str_to_polylines(
         Ok(mut vec) => {
             println!("Done!");
             vec.shrink_to_fit();
+            println!("Rust says: Found {} polylines", vec.len());
 //            out_vec = vec.map(|v| v.as_ptr()).as_ptr();
-//            out_vec_len = vec.len() as *const usize;
-            out_vec_len = vec.len() as *const usize;
+            unsafe { *out_vec_len = vec.len(); }
             mem::forget(vec);
             0
         },
