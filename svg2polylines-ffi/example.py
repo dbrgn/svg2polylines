@@ -15,6 +15,7 @@ typedef struct Polyline {
 } Polyline;
 
 uint8_t svg_str_to_polylines(char* svg, Polyline** polylines, size_t* polylines_len);
+void free_polylines(Polyline* polylines, size_t polylines_len);
 ''')
 
 svg_input = b'''
