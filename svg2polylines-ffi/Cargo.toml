@@ -1,7 +1,16 @@
 [package]
 name = "svg2polylines-ffi"
 version = "0.1.0"
+repository = "https://github.com/dbrgn/svg2polylines"
+license = "MIT OR Apache-2.0"
 authors = ["Danilo Bargen <mail@dbrgn.ch>"]
+keywords = ["svg", "polyline", "robotics"]
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE-*",
+]
 
 [lib]
 name = "svg2polylines"

@@ -13,6 +13,9 @@ This repository contains two creates:
 - `svg2polylines-ffi` contains a C interface so that the library can be used
   from other programming languages like C or Python.
 
+Minimal required Rust version: 1.13.
+
+
 ## Usage: Rust
 
 Signature:
@@ -22,6 +25,7 @@ fn svg2polylines::parse(&str) -> Result<Vec<Polyline>, String>;
 ```
 
 See [`svg2polylines/examples/basic.rs`][example-src] for a full usage example.
+
 
 ## FFI
 
@@ -56,6 +60,7 @@ You should call the `svg_str_to_polylines` function with the following arguments
 The return value indicates errors during processing. You **must** check it
 before accessing the `polylines` and `polylines_len` pointers. If it equals
 `0`, then processing was successful.
+
 
 ## Usage: C
 
@@ -92,6 +97,7 @@ Example output:
         (-39.687500, 49.514881)
         (40.065480, 49.514881)
 
+
 ## Usage: Python
 
 A Python usage example (with [CFFI](https://cffi.readthedocs.io/)) can be found
@@ -120,6 +126,23 @@ Example output:
         (40.443450, 35.818452)
         (-39.687500, 49.514881)
         (40.065480, 49.514881)
+
+
+## License
+
+Licensed under either of
+
+ * Apache License, Version 2.0 (LICENSE-APACHE or
+   http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license (LICENSE-MIT or
+   http://opensource.org/licenses/MIT) at your option.
+
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall
+be dual licensed as above, without any additional terms or conditions.
 
 
 [example-src]: https://github.com/dbrgn/svg2polylines/blob/master/svg2polylines/examples/basic.rs
