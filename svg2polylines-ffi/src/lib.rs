@@ -36,9 +36,9 @@ pub extern fn svg_str_to_polylines(
 
     // Process
     match parse(r_str) {
-        Ok(mut vec) => {
+        Ok(vec) => {
             // Convert `Vec<Vec<CoordinatePair>>` to `Vec<Polyline>`
-            let mut tmp_vec: Vec<Polyline> = vec.drain(..).map(|mut v| {
+            let mut tmp_vec: Vec<Polyline> = vec.into_iter().map(|mut v| {
                 v.shrink_to_fit();
                 let p = Polyline {
                     ptr: v.as_mut_ptr(),
