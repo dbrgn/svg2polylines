@@ -126,6 +126,11 @@ fn parse_path(data: Stream) -> Vec<Polyline> {
         }
     }
 
+    // Path parsing is done, add previously parsing line if valid
+    if line.is_valid() {
+        lines.push(line.finish());
+    }
+
     lines
 }
 
@@ -273,6 +278,23 @@ mod tests {
         assert_eq!(current_line.is_valid(), false);
         let finished = current_line.finish();
         assert_eq!(finished.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_simple_nonclosed() {
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="m 113,35 h 40 l -39,49 h 40" />
+            </svg>
+        "#;
+        let result = parse(&input).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 4);
+        assert_eq!(result[0][0], (113., 35.).into());
+        assert_eq!(result[0][1], (40., 35.).into());
+        assert_eq!(result[0][2], (-39., 49.).into());
+        assert_eq!(result[0][3], (40., 49.).into());
     }
 
 }
