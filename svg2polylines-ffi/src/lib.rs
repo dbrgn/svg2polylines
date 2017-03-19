@@ -47,6 +47,9 @@ pub extern fn svg_str_to_polylines(
 
             // Return pointer to data
             unsafe { *polylines = tmp_vec.as_mut_ptr(); }
+
+            // Prevent memory from being deallocated
+            mem::forget(vec);
             mem::forget(tmp_vec);
 
             0
