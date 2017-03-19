@@ -3,6 +3,7 @@
 extern crate libc;
 extern crate svg2polylines;
 
+use std::mem;
 use std::ffi::CStr;
 
 use libc::{c_char, size_t};
@@ -33,8 +34,6 @@ pub extern fn svg_str_to_polylines(
     // Process
     match parse(r_str) {
         Ok(vec) => {
-            println!("Done!");
-
             // Convert `Vec<Vec<CoordinatePair>>` to `Vec<Polyline>`
             let mut tmp_vec: Vec<Polyline> = vec.iter().map(|v| Polyline {
                 ptr: v.as_ptr(),
@@ -46,9 +45,9 @@ pub extern fn svg_str_to_polylines(
             // Return number of polylines
             unsafe { *out_vec_len = tmp_vec.len(); }
 
-            // Move data to heap and return pointer to it
-            let boxed = Box::new(tmp_vec);
-            unsafe { *out_vec = Box::into_raw(boxed) as *mut Polyline; }
+            // Return pointer to data
+            unsafe { *out_vec = tmp_vec.as_mut_ptr(); }
+            mem::forget(tmp_vec);
 
             0
         },
