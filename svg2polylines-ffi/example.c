@@ -13,6 +13,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+// Types
+
 typedef struct CoordinatePair {
     double x;
     double y;
@@ -23,9 +25,10 @@ typedef struct Polyline {
     size_t len;
 } Polyline;
 
-uint8_t svg_str_to_polylines(char* svg,
-                             Polyline** out_vec,
-                             size_t* out_vec_len);
+uint8_t svg_str_to_polylines(char* svg, Polyline** out_vec, size_t* out_vec_len);
+
+
+// Helpers
 
 void print_polyline(Polyline* p) {
     printf("  Address: %p\n", p);
@@ -36,6 +39,9 @@ void print_polyline(Polyline* p) {
         printf("    (%f, %f)\n", p->ptr[i].x, p->ptr[i].y);
     }
 }
+
+
+// Entry point
 
 int main() {
     // SVG data
