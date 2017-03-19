@@ -38,12 +38,14 @@ pub extern fn svg_str_to_polylines(
     match parse(r_str) {
         Ok(mut vec) => {
             // Convert `Vec<Vec<CoordinatePair>>` to `Vec<Polyline>`
-            let mut tmp_vec: Vec<Polyline> = vec.iter_mut().map(|v| {
+            let mut tmp_vec: Vec<Polyline> = vec.drain(..).map(|mut v| {
                 v.shrink_to_fit();
-                Polyline {
+                let p = Polyline {
                     ptr: v.as_mut_ptr(),
                     len: v.len(),
-                }
+                };
+                mem::forget(v);
+                p
             }).collect();
             tmp_vec.shrink_to_fit();
             assert!(tmp_vec.len() == tmp_vec.capacity());
@@ -55,7 +57,6 @@ pub extern fn svg_str_to_polylines(
             unsafe { *polylines = tmp_vec.as_mut_ptr(); }
 
             // Prevent memory from being deallocated
-            mem::forget(vec);
             mem::forget(tmp_vec);
 
             0
