@@ -14,7 +14,7 @@ typedef struct Polyline {
     size_t len;
 } Polyline;
 
-uint8_t svg_str_to_polylines(char* svg, Polyline** out_vec, size_t* out_vec_len);
+uint8_t svg_str_to_polylines(char* svg, Polyline** polylines, size_t* polylines_len);
 ''')
 
 svg_input = b'''
@@ -44,12 +44,12 @@ def print_polyline(p):
         print('    (%f, %f)' % (p.ptr[i].x, p.ptr[i].y))
 
 
-out_vec = ffi.new('Polyline**')
-out_vec_len = ffi.new('size_t*')
-lib.svg_str_to_polylines(svg_input, out_vec, out_vec_len)
+polylines = ffi.new('Polyline**')
+polylines_len = ffi.new('size_t*')
+lib.svg_str_to_polylines(svg_input, polylines, polylines_len)
 
 
-print('Found %d polylines!' % out_vec_len[0])
-for i in range(out_vec_len[0]):
+print('Found %d polylines!' % polylines_len[0])
+for i in range(polylines_len[0]):
     print('Polyline %d:' % (i + 1))
-    print_polyline(out_vec[0][i])
+    print_polyline(polylines[0][i])

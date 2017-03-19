@@ -20,8 +20,8 @@ pub struct Polyline {
 #[no_mangle]
 pub extern fn svg_str_to_polylines(
     svg: *const c_char,
-    out_vec: *mut *mut Polyline,
-    out_vec_len: *mut size_t,
+    polylines: *mut *mut Polyline,
+    polylines_len: *mut size_t,
 ) -> u8 {
 
     // Convert C string to Rust string
@@ -43,10 +43,10 @@ pub extern fn svg_str_to_polylines(
             assert!(tmp_vec.len() == tmp_vec.capacity());
 
             // Return number of polylines
-            unsafe { *out_vec_len = tmp_vec.len(); }
+            unsafe { *polylines_len = tmp_vec.len(); }
 
             // Return pointer to data
-            unsafe { *out_vec = tmp_vec.as_mut_ptr(); }
+            unsafe { *polylines = tmp_vec.as_mut_ptr(); }
             mem::forget(tmp_vec);
 
             0
