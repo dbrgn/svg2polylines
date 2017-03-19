@@ -6,10 +6,11 @@ use std::mem;
 use std::str;
 
 use svgparser::{svg, path, Stream};
-use svgparser::path::SegmentData::{self, MoveTo, LineTo, HorizontalLineTo, VerticalLineTo};
+use svgparser::path::SegmentData;
+use svgparser::path::SegmentData::{MoveTo, LineTo, HorizontalLineTo, VerticalLineTo, ClosePath};
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub struct CoordinatePair {
     pub x: f64,
     pub y: f64,
@@ -60,6 +61,17 @@ impl CurrentLine {
         self.line.last().map(|pair| pair.y)
     }
 
+    /// Close the line by adding the first entry to the end.
+    fn close(&mut self) -> Result<(), String> {
+        if self.line.len() < 2 {
+            Err("Lines with less than 2 coordinate pairs cannot be closed.".into())
+        } else {
+            let first = self.line[0];
+            self.line.push(first);
+            Ok(())
+        }
+    }
+
     /// Replace the internal polyline with a new instance and return the
     /// previously stored polyline.
     fn finish(&mut self) -> Polyline {
@@ -93,6 +105,9 @@ fn parse_segment_data(data: &SegmentData,
                 Some(x) => current_line.add(CoordinatePair::new(x, y)),
                 None => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
             }
+        },
+        &ClosePath => {
+            current_line.close().map_err(|e| format!("Invalid state: {}", e))?;
         },
         d @ _ => {
             return Err(format!("Unsupported segment data: {:?}", d));
@@ -190,6 +205,20 @@ mod tests {
         assert_eq!(finished[0], (1.0, 2.0).into());
         assert_eq!(finished[1], (2.0, 3.0).into());
         assert_eq!(line.is_valid(), false);
+    }
+
+    #[test]
+    fn test_current_line_close() {
+        let mut line = CurrentLine::new();
+        assert_eq!(line.close(), Err("Lines with less than 2 coordinate pairs cannot be closed.".into()));
+        line.add((1.0, 2.0).into());
+        assert_eq!(line.close(), Err("Lines with less than 2 coordinate pairs cannot be closed.".into()));
+        line.add((2.0, 3.0).into());
+        assert_eq!(line.close(), Ok(()));
+        let finished = line.finish();
+        assert_eq!(finished.len(), 3);
+        assert_eq!(finished[0], (1.0, 2.0).into());
+        assert_eq!(finished[2], (1.0, 2.0).into());
     }
 
     #[test]
@@ -295,6 +324,23 @@ mod tests {
         assert_eq!(result[0][1], (40., 35.).into());
         assert_eq!(result[0][2], (-39., 49.).into());
         assert_eq!(result[0][3], (40., 49.).into());
+    }
+
+    #[test]
+    fn test_parse_simple_closed() {
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="m 10,10 20,15 10,20 z" />
+            </svg>
+        "#;
+        let result = parse(&input).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 4);
+        assert_eq!(result[0][0], (10., 10.).into());
+        assert_eq!(result[0][1], (20., 15.).into());
+        assert_eq!(result[0][2], (10., 20.).into());
+        assert_eq!(result[0][3], (10., 10.).into());
     }
 
 }
