@@ -1,4 +1,6 @@
 #![crate_type = "dylib"]
+#![feature(alloc_system)]
+extern crate alloc_system;
 
 extern crate libc;
 extern crate svg2polylines;
@@ -11,9 +13,10 @@ use svg2polylines::{CoordinatePair, parse};
 
 /// Structure that contains a pointer to the coordinate pairs as well as the
 /// number of coordinate pairs. It is only used for C interop.
+#[derive(Debug)]
 #[repr(C)]
 pub struct Polyline {
-    ptr: *const CoordinatePair,
+    ptr: *mut CoordinatePair,
     len: size_t,
 }
 
@@ -33,17 +36,20 @@ pub extern fn svg_str_to_polylines(
 
     // Process
     match parse(r_str) {
-        Ok(vec) => {
+        Ok(mut vec) => {
             // Convert `Vec<Vec<CoordinatePair>>` to `Vec<Polyline>`
-            let mut tmp_vec: Vec<Polyline> = vec.iter().map(|v| Polyline {
-                ptr: v.as_ptr(),
-                len: v.len(),
+            let mut tmp_vec: Vec<Polyline> = vec.iter_mut().map(|v| {
+                v.shrink_to_fit();
+                Polyline {
+                    ptr: v.as_mut_ptr(),
+                    len: v.len(),
+                }
             }).collect();
             tmp_vec.shrink_to_fit();
             assert!(tmp_vec.len() == tmp_vec.capacity());
 
             // Return number of polylines
-            unsafe { *polylines_len = tmp_vec.len(); }
+            unsafe { *polylines_len = tmp_vec.len() as size_t; }
 
             // Return pointer to data
             unsafe { *polylines = tmp_vec.as_mut_ptr(); }
@@ -55,5 +61,14 @@ pub extern fn svg_str_to_polylines(
             0
         },
         Err(_) => 1
+    }
+}
+
+#[no_mangle]
+pub extern fn free_polylines(polylines: *mut Polyline, polylines_len: size_t) {
+    unsafe {
+        for p in Vec::from_raw_parts(polylines, polylines_len as usize, polylines_len as usize) {
+            Vec::from_raw_parts(p.ptr, p.len as usize, p.len as usize);
+        }
     }
 }

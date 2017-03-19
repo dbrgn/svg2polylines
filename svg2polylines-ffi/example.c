@@ -26,6 +26,7 @@ typedef struct Polyline {
 } Polyline;
 
 uint8_t svg_str_to_polylines(char* svg, Polyline** polylines, size_t* polylines_len);
+uint8_t free_polylines(Polyline* polylines, size_t polylines_len);
 
 
 // Helpers
@@ -67,4 +68,7 @@ int main() {
         printf("Polyline %zu:\n", i + 1);
         print_polyline(&polylines[i]);
     }
+
+    // Free memory
+    free_polylines(polylines, polylines_len);
 }
