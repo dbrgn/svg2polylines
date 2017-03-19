@@ -1,6 +1,4 @@
 #![crate_type = "dylib"]
-#![feature(alloc_system)]
-extern crate alloc_system;
 
 extern crate libc;
 extern crate svg2polylines;
