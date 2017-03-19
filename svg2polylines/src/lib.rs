@@ -11,6 +11,7 @@ use svgparser::path::SegmentData::{MoveTo, LineTo, HorizontalLineTo, VerticalLin
 
 
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[repr(C)]
 pub struct CoordinatePair {
     pub x: f64,
     pub y: f64,
