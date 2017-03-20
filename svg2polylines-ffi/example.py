@@ -54,3 +54,5 @@ print('Found %d polylines!' % polylines_len[0])
 for i in range(polylines_len[0]):
     print('Polyline %d:' % (i + 1))
     print_polyline(polylines[0][i])
+
+lib.free_polylines(polylines[0], polylines_len[0])
