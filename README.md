@@ -50,6 +50,7 @@ typedef struct Polyline {
 } Polyline;
 
 uint8_t svg_str_to_polylines(char* svg, Polyline** polylines, size_t* polylines_len);
+void free_polylines(Polyline* polylines, size_t polylines_len);
 ```
 
 You should call the `svg_str_to_polylines` function with the following arguments:
@@ -63,6 +64,8 @@ You should call the `svg_str_to_polylines` function with the following arguments
 The return value indicates errors during processing. You **must** check it
 before accessing the `polylines` and `polylines_len` pointers. If it equals
 `0`, then processing was successful.
+
+Make sure to free the memory again with `free_polylines` once you're done.
 
 
 ## Usage: C
