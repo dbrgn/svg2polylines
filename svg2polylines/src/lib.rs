@@ -1,3 +1,16 @@
+//! Convert an SVG file to a list of polylines (aka polygonal chains or polygonal
+//! paths).
+//! 
+//! This can be used e.g. for simple drawing robot that just support drawing
+//! straight lines and liftoff / drop pen commands.
+//! 
+//! **Note: Currently the library only supports straight lines, no curves!** Also,
+//! the path style is completely ignored. Only the path itself is returned.
+//! 
+//! Minimal required Rust version: 1.13.
+//! 
+//! FFI bindings for this crate can be found [on
+//! Github](https://github.com/dbrgn/svg2polylines).
 #[macro_use] extern crate log;
 extern crate svgparser;
 
@@ -10,6 +23,7 @@ use svgparser::path::SegmentData;
 use svgparser::path::SegmentData::{MoveTo, LineTo, HorizontalLineTo, VerticalLineTo, ClosePath};
 
 
+/// A CoordinatePair consists of an x and y coordinate.
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[repr(C)]
 pub struct CoordinatePair {
@@ -29,6 +43,7 @@ impl convert::From<(f64, f64)> for CoordinatePair {
     }
 }
 
+/// A polyline is a vector of `CoordinatePair` instances.
 pub type Polyline = Vec<CoordinatePair>;
 
 #[derive(Debug, PartialEq)]
@@ -150,6 +165,7 @@ fn parse_path(data: Stream) -> Vec<Polyline> {
     lines
 }
 
+/// Parse an SVG string into a vector of polylines.
 pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
     let bytes = svg.as_bytes();
 
