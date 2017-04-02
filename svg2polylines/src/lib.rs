@@ -11,8 +11,15 @@
 //! 
 //! FFI bindings for this crate can be found [on
 //! Github](https://github.com/dbrgn/svg2polylines).
+//! 
+//! You can optionally get serde support by enabling the `use_serde` feature.
 #[macro_use] extern crate log;
 extern crate svgparser;
+
+#[cfg(feature="use_serde")]
+extern crate serde;
+#[cfg(feature="use_serde")]
+#[macro_use] extern crate serde_derive;
 
 use std::convert;
 use std::mem;
@@ -25,6 +32,7 @@ use svgparser::path::SegmentData::{MoveTo, LineTo, HorizontalLineTo, VerticalLin
 
 /// A CoordinatePair consists of an x and y coordinate.
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[cfg_attr(feature = "use_serde", derive(Serialize, Deserialize))]
 #[repr(C)]
 pub struct CoordinatePair {
     pub x: f64,
@@ -198,6 +206,8 @@ pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
 #[cfg(test)]
 mod tests {
     extern crate svgparser;
+    #[cfg(feature="use_serde")]
+    extern crate serde_json;
 
     use svgparser::path::SegmentData;
 
@@ -358,6 +368,15 @@ mod tests {
         assert_eq!(result[0][1], (20., 15.).into());
         assert_eq!(result[0][2], (10., 20.).into());
         assert_eq!(result[0][3], (10., 10.).into());
+    }
+
+    #[cfg(feature="use_serde")]
+    #[test]
+    fn test_serde() {
+        let cp = CoordinatePair::new(10.0, 20.0);
+        let cp_json = serde_json::to_string(&cp).unwrap();
+        let cp2 = serde_json::from_str(&cp_json).unwrap();
+        assert_eq!(cp, cp2);
     }
 
 }
