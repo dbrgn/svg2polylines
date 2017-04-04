@@ -6,8 +6,11 @@ paths).
 This can be used e.g. for simple drawing robot that just support drawing
 straight lines and liftoff / drop pen commands.
 
-**Note: Currently the library only supports straight lines, no curves!** Also,
-the path style is completely ignored. Only the path itself is returned.
+Flattening of Bézier curves is done using the
+[Lyon](https://github.com/nical/lyon) library.
+
+**Note: Currently the path style is completely ignored. Only the path itself is
+returned.**
 
 This repository contains two creates:
 

@@ -15,6 +15,7 @@
 //! You can optionally get serde support by enabling the `use_serde` feature.
 #[macro_use] extern crate log;
 extern crate svgparser;
+extern crate lyon_bezier;
 
 #[cfg(feature="use_serde")]
 extern crate serde;
@@ -26,8 +27,12 @@ use std::mem;
 use std::str;
 
 use svgparser::{svg, path, Stream};
-use svgparser::path::SegmentData;
-use svgparser::path::SegmentData::{MoveTo, LineTo, HorizontalLineTo, VerticalLineTo, ClosePath};
+use svgparser::path::is_absolute;
+use svgparser::path::SegmentData::{
+    self, MoveTo, LineTo, HorizontalLineTo, VerticalLineTo, ClosePath, CurveTo,
+    Quadratic,
+};
+use lyon_bezier::{CubicBezierSegment, Vec2};
 
 
 /// A CoordinatePair consists of an x and y coordinate.
@@ -66,13 +71,34 @@ impl CurrentLine {
     }
 
     /// Add a CoordinatePair to the internal polyline.
-    fn add(&mut self, pair: CoordinatePair) {
+    fn add_absolute(&mut self, pair: CoordinatePair) {
         self.line.push(pair);
+    }
+
+    /// Add a relative CoordinatePair to the internal polyline.
+    fn add_relative(&mut self, pair: CoordinatePair) {
+        match self.line.last().cloned() {
+            Some(last) => self.add_absolute(CoordinatePair::new(last.x + pair.x, last.y + pair.y)),
+            None => self.add_absolute(pair),
+        };
+    }
+
+    /// Add a CoordinatePair to the internal polyline.
+    fn add(&mut self, relativity: Relativity, pair: CoordinatePair) {
+        match relativity {
+            Relativity::Absolute => self.add_absolute(pair),
+            Relativity::Relative => self.add_relative(pair),
+        };
     }
 
     /// A polyline is only valid if it has more than 1 CoordinatePair.
     fn is_valid(&self) -> bool {
         self.line.len() > 1
+    }
+
+    /// Return the last coordinate pair (if the line is not empty).
+    fn last_pair(&self) -> Option<CoordinatePair> {
+        self.line.last().cloned()
     }
 
     /// Return the last x coordinate (if the line is not empty).
@@ -105,7 +131,25 @@ impl CurrentLine {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+enum Relativity {
+    Relative,
+    Absolute,
+}
+use Relativity::*;
+
+impl convert::From<u8> for Relativity {
+    fn from(val: u8) -> Relativity {
+        if is_absolute(val) {
+            Relativity::Absolute
+        } else {
+            Relativity::Relative
+        }
+    }
+}
+
 fn parse_segment_data(data: &SegmentData,
+                      relativity: Relativity,
                       current_line: &mut CurrentLine,
                       lines: &mut Vec<Polyline>) -> Result<(), String> {
     match data {
@@ -113,21 +157,44 @@ fn parse_segment_data(data: &SegmentData,
             if current_line.is_valid() {
                 lines.push(current_line.finish());
             }
-            current_line.add(CoordinatePair::new(x, y));
+            current_line.add(relativity, CoordinatePair::new(x, y));
         },
         &LineTo { x, y } => {
-            current_line.add(CoordinatePair::new(x, y));
+            current_line.add(relativity, CoordinatePair::new(x, y));
         },
         &HorizontalLineTo { x } => {
-            match current_line.last_y() {
-                Some(y) => current_line.add(CoordinatePair::new(x, y)),
-                None => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
+            match (current_line.last_y(), relativity) {
+                (Some(y), Absolute) => current_line.add_absolute(CoordinatePair::new(x, y)),
+                (Some(_), Relative) => current_line.add_relative(CoordinatePair::new(x, 0.0)),
+                (None, _) => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
             }
         },
         &VerticalLineTo { y } => {
-            match current_line.last_x() {
-                Some(x) => current_line.add(CoordinatePair::new(x, y)),
-                None => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
+            match (current_line.last_x(), relativity) {
+                (Some(x), Absolute) => current_line.add_absolute(CoordinatePair::new(x, y)),
+                (Some(_), Relative) => current_line.add_relative(CoordinatePair::new(0.0, y)),
+                (None, _) => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
+            }
+        },
+        &CurveTo { x1, y1, x2, y2, x, y } => {
+            let current = current_line.last_pair()
+                .ok_or("Invalid state: CurveTo on empty CurrentLine")?;
+            let curve = match relativity {
+                Absolute => CubicBezierSegment {
+                    from: Vec2::new(current.x as f32, current.y as f32),
+                    ctrl1: Vec2::new(x1 as f32, y1 as f32),
+                    ctrl2: Vec2::new(x2 as f32, y2 as f32),
+                    to: Vec2::new(x as f32, y as f32),
+                },
+                Relative => CubicBezierSegment {
+                    from: Vec2::new(current.x as f32, current.y as f32),
+                    ctrl1: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
+                    ctrl2: Vec2::new((current.x + x2) as f32, (current.y + y2) as f32),
+                    to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
+                },
+            };
+            for point in curve.flattening_iter(0.15) {
+                current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
             }
         },
         &ClosePath => {
@@ -153,7 +220,12 @@ fn parse_path(data: Stream) -> Vec<Polyline> {
                 match segment_token {
                     path::SegmentToken::Segment(segment) => {
                         debug!("  Segment data: {:?}", segment.data);
-                        parse_segment_data(&segment.data, &mut line, &mut lines).unwrap();
+                        parse_segment_data(
+                            &segment.data,
+                            Relativity::from(segment.cmd),
+                            &mut line,
+                            &mut lines
+                        ).unwrap();
                     },
                     path::SegmentToken::EndOfStream => break,
                 }
@@ -219,11 +291,11 @@ mod tests {
         assert_eq!(line.is_valid(), false);
         assert_eq!(line.last_x(), None);
         assert_eq!(line.last_y(), None);
-        line.add((1.0, 2.0).into());
+        line.add_absolute((1.0, 2.0).into());
         assert_eq!(line.is_valid(), false);
         assert_eq!(line.last_x(), Some(1.0));
         assert_eq!(line.last_y(), Some(2.0));
-        line.add((2.0, 3.0).into());
+        line.add_absolute((2.0, 3.0).into());
         assert_eq!(line.is_valid(), true);
         assert_eq!(line.last_x(), Some(2.0));
         assert_eq!(line.last_y(), Some(3.0));
@@ -238,9 +310,9 @@ mod tests {
     fn test_current_line_close() {
         let mut line = CurrentLine::new();
         assert_eq!(line.close(), Err("Lines with less than 2 coordinate pairs cannot be closed.".into()));
-        line.add((1.0, 2.0).into());
+        line.add_absolute((1.0, 2.0).into());
         assert_eq!(line.close(), Err("Lines with less than 2 coordinate pairs cannot be closed.".into()));
-        line.add((2.0, 3.0).into());
+        line.add_absolute((2.0, 3.0).into());
         assert_eq!(line.close(), Ok(()));
         let finished = line.finish();
         assert_eq!(finished.len(), 3);
