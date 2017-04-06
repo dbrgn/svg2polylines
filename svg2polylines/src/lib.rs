@@ -32,8 +32,9 @@ use svgparser::path::SegmentData::{
     self, MoveTo, LineTo, HorizontalLineTo, VerticalLineTo, ClosePath, CurveTo,
     Quadratic,
 };
-use lyon_bezier::{CubicBezierSegment, Vec2};
+use lyon_bezier::{QuadraticBezierSegment, CubicBezierSegment, Vec2};
 
+const FLATTENING_TOLERANCE: f32 = 0.15;
 
 /// A CoordinatePair consists of an x and y coordinate.
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -193,7 +194,26 @@ fn parse_segment_data(data: &SegmentData,
                     to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
                 },
             };
-            for point in curve.flattening_iter(0.15) {
+            for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
+                current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
+            }
+        },
+        &Quadratic { x1, y1, x, y } => {
+            let current = current_line.last_pair()
+                .ok_or("Invalid state: Quadratic on empty CurrentLine")?;
+            let curve = match relativity {
+                Absolute => QuadraticBezierSegment {
+                    from: Vec2::new(current.x as f32, current.y as f32),
+                    ctrl: Vec2::new(x1 as f32, y1 as f32),
+                    to: Vec2::new(x as f32, y as f32),
+                },
+                Relative => QuadraticBezierSegment {
+                    from: Vec2::new(current.x as f32, current.y as f32),
+                    ctrl: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
+                    to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
+                },
+            };
+            for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
                 current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
             }
         },
