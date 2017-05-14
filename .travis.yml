@@ -1,0 +1,16 @@
+sudo: false
+language: rust
+rust:
+  - 1.13.0
+  - stable
+  - nightly
+matrix:
+  allow_failures:
+    - rust: nightly
+script:
+  - cd svg2polylines
+  - cargo build
+  - cargo test
+  - cd ../svg2polylines-ffi
+  - cargo build
+  - cargo test
