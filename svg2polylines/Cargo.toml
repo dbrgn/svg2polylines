@@ -1,7 +1,7 @@
 [package]
 name = "svg2polylines"
 description = "Convert SVG data to a list of polylines (aka polygonal chains or polygonal paths)."
-version = "0.1.1"
+version = "0.2.0"
 repository = "https://github.com/dbrgn/svg2polylines"
 license = "MIT OR Apache-2.0"
 authors = ["Danilo Bargen <mail@dbrgn.ch>"]
