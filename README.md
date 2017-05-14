@@ -22,7 +22,7 @@ This repository contains two creates:
 - `svg2polylines-ffi` contains a C interface so that the library can be used
   from other programming languages like C or Python.
 
-Minimal required Rust version: 1.13.
+Minimal supported Rust version: 1.15.
 
 
 ## Usage: Rust

@@ -7,7 +7,7 @@
 //! **Note: Currently the library only supports straight lines, no curves!** Also,
 //! the path style is completely ignored. Only the path itself is returned.
 //! 
-//! Minimal required Rust version: 1.13.
+//! Minimal supported Rust version: 1.15.
 //! 
 //! FFI bindings for this crate can be found [on
 //! Github](https://github.com/dbrgn/svg2polylines).
