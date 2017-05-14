@@ -348,15 +348,15 @@ mod tests {
         parse_segment_data(&SegmentData::MoveTo {
             x: 1.0,
             y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
         parse_segment_data(&SegmentData::LineTo {
             x: 2.0,
             y: 3.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
         parse_segment_data(&SegmentData::LineTo {
             x: 3.0,
             y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
@@ -374,13 +374,13 @@ mod tests {
         parse_segment_data(&SegmentData::MoveTo {
             x: 1.0,
             y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
         parse_segment_data(&SegmentData::HorizontalLineTo {
             x: 3.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
         parse_segment_data(&SegmentData::VerticalLineTo {
             y: -1.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
@@ -398,11 +398,11 @@ mod tests {
         parse_segment_data(&SegmentData::MoveTo {
             x: 1.0,
             y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
         let result = parse_segment_data(&SegmentData::SmoothQuadratic {
             x: 3.0,
             y: 4.0,
-        }, &mut current_line, &mut lines);
+        }, Relativity::Absolute, &mut current_line, &mut lines);
         assert!(result.is_err());
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
@@ -415,13 +415,13 @@ mod tests {
     fn test_parse_segment_data_multiple() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 2.0, }, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 2.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 3.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 3.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 4.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 4.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 5.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
+        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 5.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
         assert_eq!(lines.len(), 3);
         assert_eq!(current_line.is_valid(), false);
         let finished = current_line.finish();
@@ -429,11 +429,11 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_simple_nonclosed() {
+    fn test_parse_simple_absolute_nonclosed() {
         let input = r#"
             <?xml version="1.0" encoding="UTF-8" standalone="no"?>
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
-                <path d="m 113,35 h 40 l -39,49 h 40" />
+                <path d="M 113,35 H 40 L -39,49 H 40" />
             </svg>
         "#;
         let result = parse(&input).unwrap();
@@ -446,11 +446,11 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_simple_closed() {
+    fn test_parse_simple_absolute_closed() {
         let input = r#"
             <?xml version="1.0" encoding="UTF-8" standalone="no"?>
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
-                <path d="m 10,10 20,15 10,20 z" />
+                <path d="M 10,10 20,15 10,20 Z" />
             </svg>
         "#;
         let result = parse(&input).unwrap();
