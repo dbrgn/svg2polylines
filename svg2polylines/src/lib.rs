@@ -26,12 +26,7 @@ use std::convert;
 use std::mem;
 use std::str;
 
-use svgparser::{svg, path, Stream};
-use svgparser::path::is_absolute;
-use svgparser::path::SegmentData::{
-    self, MoveTo, LineTo, HorizontalLineTo, VerticalLineTo, ClosePath, CurveTo,
-    Quadratic,
-};
+use svgparser::{svg, path, AttributeId, Tokenize};
 use lyon_bezier::{QuadraticBezierSegment, CubicBezierSegment, Vec2};
 
 const FLATTENING_TOLERANCE: f32 = 0.15;
@@ -85,11 +80,12 @@ impl CurrentLine {
     }
 
     /// Add a CoordinatePair to the internal polyline.
-    fn add(&mut self, relativity: Relativity, pair: CoordinatePair) {
-        match relativity {
-            Relativity::Absolute => self.add_absolute(pair),
-            Relativity::Relative => self.add_relative(pair),
-        };
+    fn add(&mut self, abs: bool, pair: CoordinatePair) {
+        if abs {
+            self.add_absolute(pair);
+        } else {
+            self.add_relative(pair);
+        }
     }
 
     /// A polyline is only valid if it has more than 1 CoordinatePair.
@@ -132,126 +128,104 @@ impl CurrentLine {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-enum Relativity {
-    Relative,
-    Absolute,
-}
-use Relativity::*;
-
-impl convert::From<u8> for Relativity {
-    fn from(val: u8) -> Relativity {
-        if is_absolute(val) {
-            Relativity::Absolute
-        } else {
-            Relativity::Relative
-        }
-    }
-}
-
-fn parse_segment_data(data: &SegmentData,
-                      relativity: Relativity,
-                      current_line: &mut CurrentLine,
-                      lines: &mut Vec<Polyline>) -> Result<(), String> {
+fn parse_path_token(data: &path::Token,
+                    current_line: &mut CurrentLine,
+                    lines: &mut Vec<Polyline>) -> Result<(), String> {
     match data {
-        &MoveTo { x, y } => {
+        &path::Token::MoveTo { abs, x, y } => {
             if current_line.is_valid() {
                 lines.push(current_line.finish());
             }
-            current_line.add(relativity, CoordinatePair::new(x, y));
+            current_line.add(abs, CoordinatePair::new(x, y));
         },
-        &LineTo { x, y } => {
-            current_line.add(relativity, CoordinatePair::new(x, y));
+        &path::Token::LineTo { abs, x, y } => {
+            current_line.add(abs, CoordinatePair::new(x, y));
         },
-        &HorizontalLineTo { x } => {
-            match (current_line.last_y(), relativity) {
-                (Some(y), Absolute) => current_line.add_absolute(CoordinatePair::new(x, y)),
-                (Some(_), Relative) => current_line.add_relative(CoordinatePair::new(x, 0.0)),
+        &path::Token::HorizontalLineTo { abs, x } => {
+            match (current_line.last_y(), abs) {
+                (Some(y), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
+                (Some(_), false) => current_line.add_relative(CoordinatePair::new(x, 0.0)),
                 (None, _) => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
             }
         },
-        &VerticalLineTo { y } => {
-            match (current_line.last_x(), relativity) {
-                (Some(x), Absolute) => current_line.add_absolute(CoordinatePair::new(x, y)),
-                (Some(_), Relative) => current_line.add_relative(CoordinatePair::new(0.0, y)),
+        &path::Token::VerticalLineTo { abs, y } => {
+            match (current_line.last_x(), abs) {
+                (Some(x), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
+                (Some(_), false) => current_line.add_relative(CoordinatePair::new(0.0, y)),
                 (None, _) => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
             }
         },
-        &CurveTo { x1, y1, x2, y2, x, y } => {
+        &path::Token::CurveTo { abs, x1, y1, x2, y2, x, y } => {
             let current = current_line.last_pair()
                 .ok_or("Invalid state: CurveTo on empty CurrentLine")?;
-            let curve = match relativity {
-                Absolute => CubicBezierSegment {
+            let curve = if abs {
+                CubicBezierSegment {
                     from: Vec2::new(current.x as f32, current.y as f32),
                     ctrl1: Vec2::new(x1 as f32, y1 as f32),
                     ctrl2: Vec2::new(x2 as f32, y2 as f32),
                     to: Vec2::new(x as f32, y as f32),
-                },
-                Relative => CubicBezierSegment {
+                }
+            } else {
+                CubicBezierSegment {
                     from: Vec2::new(current.x as f32, current.y as f32),
                     ctrl1: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
                     ctrl2: Vec2::new((current.x + x2) as f32, (current.y + y2) as f32),
                     to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
-                },
+                }
             };
             for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
                 current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
             }
         },
-        &Quadratic { x1, y1, x, y } => {
+        &path::Token::Quadratic { abs, x1, y1, x, y } => {
             let current = current_line.last_pair()
                 .ok_or("Invalid state: Quadratic on empty CurrentLine")?;
-            let curve = match relativity {
-                Absolute => QuadraticBezierSegment {
+            let curve = if abs {
+                QuadraticBezierSegment {
                     from: Vec2::new(current.x as f32, current.y as f32),
                     ctrl: Vec2::new(x1 as f32, y1 as f32),
                     to: Vec2::new(x as f32, y as f32),
-                },
-                Relative => QuadraticBezierSegment {
+                }
+            } else {
+                QuadraticBezierSegment {
                     from: Vec2::new(current.x as f32, current.y as f32),
                     ctrl: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
                     to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
-                },
+                }
             };
             for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
                 current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
             }
         },
-        &ClosePath => {
+        &path::Token::ClosePath { .. } => {
             current_line.close().map_err(|e| format!("Invalid state: {}", e))?;
         },
         d @ _ => {
-            return Err(format!("Unsupported segment data: {:?}", d));
+            return Err(format!("Unsupported token: {:?}", d));
         }
     }
     Ok(())
 }
 
-fn parse_path(data: Stream) -> Vec<Polyline> {
+fn parse_path(mut path: path::Tokenizer) -> Vec<Polyline> {
     debug!("New path");
 
     let mut lines = Vec::new();
 
-    let mut p = path::Tokenizer::new(data);
     let mut line = CurrentLine::new();
     loop {
-        match p.parse_next() {
-            Ok(segment_token) => {
-                match segment_token {
-                    path::SegmentToken::Segment(segment) => {
-                        debug!("  Segment data: {:?}", segment.data);
-                        parse_segment_data(
-                            &segment.data,
-                            Relativity::from(segment.cmd),
-                            &mut line,
-                            &mut lines
-                        ).unwrap();
-                    },
-                    path::SegmentToken::EndOfStream => break,
+        match path.parse_next() {
+            Ok(token) => {
+                match token {
+                    // If we reach the end of the token stream, stop parsing
+                    path::Token::EndOfStream => break,
+
+                    // Otherwise, parse this token
+                    t @ _ => parse_path_token(&t, &mut line, &mut lines).unwrap(),
                 }
             },
             Err(e) => {
-                warn!("Invalid path segment: {:?}", e);
+                warn!("Error while parsing path: {}", e);
                 break;
             },
         }
@@ -267,22 +241,26 @@ fn parse_path(data: Stream) -> Vec<Polyline> {
 
 /// Parse an SVG string into a vector of polylines.
 pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
-    let bytes = svg.as_bytes();
-
+    // Vector that will hold resulting polylines
     let mut polylines = Vec::new();
-    let mut tokenizer = svg::Tokenizer::new(&bytes);
+
+    // Tokenize the SVG strings into svg::Token instances
+    let mut tokenizer = svg::Tokenizer::from_str(&svg);
+
+    // Loop over all tokens and parse the apths
     loop {
         match tokenizer.parse_next() {
             Ok(t) => {
                 match t {
-                    svg::Token::Attribute(name, value) => {
+                    svg::Token::SvgAttribute(id, textframe) => {
                         // Process only 'd' attributes
-                        if name == b"d" {
-                            polylines.extend(parse_path(value));
+                        if id == AttributeId::D {
+                            let path = path::Tokenizer::from_frame(textframe);
+                            polylines.extend(parse_path(path));
                         }
                     },
                     svg::Token::EndOfStream => break,
-                    _ => {},
+                    _ => { },
                 }
             },
             Err(e) => {
@@ -301,7 +279,7 @@ mod tests {
     #[cfg(feature="use_serde")]
     extern crate serde_json;
 
-    use svgparser::path::SegmentData;
+    use svgparser::path::Token;
 
     use super::*;
 
@@ -345,18 +323,21 @@ mod tests {
     fn test_parse_segment_data() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_segment_data(&SegmentData::MoveTo {
+        parse_path_token(&Token::MoveTo {
+            abs: true,
             x: 1.0,
             y: 2.0,
-        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::LineTo {
+        }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::LineTo {
+            abs: true,
             x: 2.0,
             y: 3.0,
-        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::LineTo {
+        }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::LineTo {
+            abs: true,
             x: 3.0,
             y: 2.0,
-        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
+        }, &mut current_line, &mut lines).unwrap();
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
@@ -371,16 +352,19 @@ mod tests {
     fn test_parse_segment_data_horizontal_vertical() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_segment_data(&SegmentData::MoveTo {
+        parse_path_token(&Token::MoveTo {
+            abs: true,
             x: 1.0,
             y: 2.0,
-        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::HorizontalLineTo {
+        }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::HorizontalLineTo {
+            abs: true,
             x: 3.0,
-        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::VerticalLineTo {
+        }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::VerticalLineTo {
+            abs: true,
             y: -1.0,
-        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
+        }, &mut current_line, &mut lines).unwrap();
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
@@ -395,14 +379,16 @@ mod tests {
     fn test_parse_segment_data_unsupported() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_segment_data(&SegmentData::MoveTo {
+        parse_path_token(&Token::MoveTo {
+            abs: true,
             x: 1.0,
             y: 2.0,
-        }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        let result = parse_segment_data(&SegmentData::SmoothQuadratic {
+        }, &mut current_line, &mut lines).unwrap();
+        let result = parse_path_token(&Token::SmoothQuadratic {
+            abs: true,
             x: 3.0,
             y: 4.0,
-        }, Relativity::Absolute, &mut current_line, &mut lines);
+        }, &mut current_line, &mut lines);
         assert!(result.is_err());
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
@@ -415,13 +401,13 @@ mod tests {
     fn test_parse_segment_data_multiple() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 2.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 3.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 3.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 4.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 4.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::LineTo { x: 2.0, y: 5.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
-        parse_segment_data(&SegmentData::MoveTo { x: 1.0, y: 5.0, }, Relativity::Absolute, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 2.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::LineTo { abs: true, x: 2.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::LineTo { abs: true, x: 2.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::LineTo { abs: true, x: 2.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
         assert_eq!(lines.len(), 3);
         assert_eq!(current_line.is_valid(), false);
         let finished = current_line.finish();

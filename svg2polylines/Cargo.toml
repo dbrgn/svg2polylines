@@ -18,7 +18,7 @@ default = []
 use_serde = ["serde", "serde_derive"]
 
 [dependencies]
-svgparser = "^0.3"
+svgparser = "^0.4"
 log = "^0.3"
 serde = { version = "^1.0", optional = true }
 serde_derive = { version = "^1.0", optional = true }
