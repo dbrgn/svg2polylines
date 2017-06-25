@@ -60,13 +60,21 @@ pub type Polyline = Vec<CoordinatePair>;
 
 #[derive(Debug, PartialEq)]
 struct CurrentLine {
+    /// The polyline containing the coordinate pairs for the current line.
     line: Polyline,
+
+    /// This is set to the start coordinates of the previous polyline if the
+    /// path expression contains multiple polylines.
+    prev_end: Option<CoordinatePair>,
 }
 
 /// Simple data structure that acts as a Polyline buffer.
 impl CurrentLine {
     fn new() -> Self {
-        CurrentLine { line: Polyline::new() }
+        CurrentLine {
+            line: Polyline::new(),
+            prev_end: None,
+        }
     }
 
     /// Add a CoordinatePair to the internal polyline.
@@ -76,10 +84,13 @@ impl CurrentLine {
 
     /// Add a relative CoordinatePair to the internal polyline.
     fn add_relative(&mut self, pair: CoordinatePair) {
-        match self.line.last().cloned() {
-            Some(last) => self.add_absolute(CoordinatePair::new(last.x + pair.x, last.y + pair.y)),
-            None => self.add_absolute(pair),
-        };
+        if let Some(last) = self.line.last().cloned() {
+            self.add_absolute(CoordinatePair::new(last.x + pair.x, last.y + pair.y));
+        } else if let Some(last) = self.prev_end {
+            self.add_absolute(CoordinatePair::new(last.x + pair.x, last.y + pair.y));
+        } else {
+            self.add_absolute(pair);
+        }
     }
 
     /// Add a CoordinatePair to the internal polyline.
@@ -118,6 +129,7 @@ impl CurrentLine {
         } else {
             let first = self.line[0];
             self.line.push(first);
+            self.prev_end = Some(first);
             Ok(())
         }
     }
@@ -458,6 +470,28 @@ mod tests {
         let cp_json = serde_json::to_string(&cp).unwrap();
         let cp2 = serde_json::from_str(&cp_json).unwrap();
         assert_eq!(cp, cp2);
+    }
+
+    #[test]
+    fn test_regression_issue_5() {
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M 10,10 20,15 10,20 Z m 0,40 H 0" />
+            </svg>
+        "#;
+        let result = parse(&input).unwrap();
+        assert_eq!(result.len(), 2);
+
+        assert_eq!(result[0].len(), 4);
+        assert_eq!(result[0][0], (10., 10.).into());
+        assert_eq!(result[0][1], (20., 15.).into());
+        assert_eq!(result[0][2], (10., 20.).into());
+        assert_eq!(result[0][3], (10., 10.).into());
+
+        assert_eq!(result[1].len(), 2);
+        assert_eq!(result[1][0], (10., 50.).into());
+        assert_eq!(result[1][1], (0., 50.).into());
     }
 
 }
