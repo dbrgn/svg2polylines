@@ -70,7 +70,7 @@ fn main() {
                     translate_tmp = translate.trans(x - start_x, y - start_y);
                     true
                 },
-                Drag::End(x, y) => {
+                Drag::End(..) => {
                     translate_start = None;
                     translate = translate_tmp;
                     false
