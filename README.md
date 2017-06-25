@@ -25,6 +25,21 @@ This repository contains two creates:
 Minimal supported Rust version: 1.15.
 
 
+## Preview
+
+There is a small preview tool to view the generated polylines. It's simple and
+hacky, but helps to debug stuff.
+
+```shell
+cd svg2polylines
+cargo run --release --example preview path/to/file.svg
+```
+
+The `--release` parameter is important, otherwise it's going to be very slow.
+
+Use the mouse to drag the image and the `Esc` key to close the window.
+
+
 ## Usage: Rust
 
 Signature:
