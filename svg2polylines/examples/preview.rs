@@ -15,7 +15,7 @@ use svg2polylines::Polyline;
 
 fn main() {
     // Logging
-    env_logger::init().expect("Could not initialize env logger");
+    env_logger::init();
 
     // Argument parsing
     let args: Vec<_> = env::args().collect();
@@ -33,10 +33,7 @@ fn main() {
     file.read_to_string(&mut s).unwrap();
 
     // Parse data
-    let polylines: Vec<Polyline> = svg2polylines::parse(&s).unwrap_or_else(|e| {
-        println!("Error: {}", e);
-        exit(2);
-    });
+    let polylines: Vec<Polyline> = svg2polylines::parse(&s);
 
     // Create window
     let opengl = OpenGL::V3_2;

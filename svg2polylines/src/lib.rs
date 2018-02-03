@@ -1,20 +1,20 @@
 //! Convert an SVG file to a list of polylines (aka polygonal chains or polygonal
 //! paths).
-//! 
+//!
 //! This can be used e.g. for simple drawing robot that just support drawing
 //! straight lines and liftoff / drop pen commands.
-//! 
+//!
 //! Flattening of Bézier curves is done using the
 //! [Lyon](https://github.com/nical/lyon) library.
 //!
 //! **Note: Currently the path style is completely ignored. Only the path itself is
 //! returned.**
-//! 
+//!
 //! Minimal supported Rust version: 1.16.
-//! 
+//!
 //! FFI bindings for this crate can be found [on
 //! Github](https://github.com/dbrgn/svg2polylines).
-//! 
+//!
 //! You can optionally get serde 1 support by enabling the `use_serde` feature.
 #[macro_use] extern crate log;
 extern crate svgparser;
@@ -29,8 +29,9 @@ use std::convert;
 use std::mem;
 use std::str;
 
-use svgparser::{svg, path, AttributeId, Tokenize};
-use lyon_bezier::{QuadraticBezierSegment, CubicBezierSegment, Vec2};
+use svgparser::{path, AttributeId, FromSpan};
+use svgparser::svg::{Tokenizer, Token};
+use lyon_bezier::{QuadraticBezierSegment, CubicBezierSegment, Point};
 
 const FLATTENING_TOLERANCE: f32 = 0.15;
 
@@ -116,7 +117,7 @@ impl CurrentLine {
     fn last_x(&self) -> Option<f64> {
         self.line.last().map(|pair| pair.x)
     }
-    
+
     /// Return the last y coordinate (if the line is not empty).
     fn last_y(&self) -> Option<f64> {
         self.line.last().map(|pair| pair.y)
@@ -175,20 +176,20 @@ fn parse_path_token(data: &path::Token,
                 .ok_or("Invalid state: CurveTo on empty CurrentLine")?;
             let curve = if abs {
                 CubicBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl1: Vec2::new(x1 as f32, y1 as f32),
-                    ctrl2: Vec2::new(x2 as f32, y2 as f32),
-                    to: Vec2::new(x as f32, y as f32),
+                    from: Point::new(current.x as f32, current.y as f32),
+                    ctrl1: Point::new(x1 as f32, y1 as f32),
+                    ctrl2: Point::new(x2 as f32, y2 as f32),
+                    to: Point::new(x as f32, y as f32),
                 }
             } else {
                 CubicBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl1: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
-                    ctrl2: Vec2::new((current.x + x2) as f32, (current.y + y2) as f32),
-                    to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
+                    from: Point::new(current.x as f32, current.y as f32),
+                    ctrl1: Point::new((current.x + x1) as f32, (current.y + y1) as f32),
+                    ctrl2: Point::new((current.x + x2) as f32, (current.y + y2) as f32),
+                    to: Point::new((current.x + x) as f32, (current.y + y) as f32),
                 }
             };
-            for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
+            for point in curve.flattened(FLATTENING_TOLERANCE) {
                 current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
             }
         },
@@ -197,18 +198,18 @@ fn parse_path_token(data: &path::Token,
                 .ok_or("Invalid state: Quadratic on empty CurrentLine")?;
             let curve = if abs {
                 QuadraticBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl: Vec2::new(x1 as f32, y1 as f32),
-                    to: Vec2::new(x as f32, y as f32),
+                    from: Point::new(current.x as f32, current.y as f32),
+                    ctrl: Point::new(x1 as f32, y1 as f32),
+                    to: Point::new(x as f32, y as f32),
                 }
             } else {
                 QuadraticBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
-                    to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
+                    from: Point::new(current.x as f32, current.y as f32),
+                    ctrl: Point::new((current.x + x1) as f32, (current.y + y1) as f32),
+                    to: Point::new((current.x + x) as f32, (current.y + y) as f32),
                 }
             };
-            for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
+            for point in curve.flattened(FLATTENING_TOLERANCE) {
                 current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
             }
         },
@@ -222,29 +223,15 @@ fn parse_path_token(data: &path::Token,
     Ok(())
 }
 
-fn parse_path(mut path: path::Tokenizer) -> Vec<Polyline> {
+fn parse_path(path: path::Tokenizer) -> Vec<Polyline> {
     debug!("New path");
 
     let mut lines = Vec::new();
 
     let mut line = CurrentLine::new();
-    loop {
-        match path.parse_next() {
-            Ok(token) => {
-                match token {
-                    // If we reach the end of the token stream, stop parsing
-                    path::Token::EndOfStream => break,
-
-                    // Otherwise, parse this token
-                    t @ _ => parse_path_token(&t, &mut line, &mut lines).unwrap(),
-                }
-            },
-            Err(e) => {
-                warn!("Error while parsing path: {}", e);
-                break;
-            },
-        }
-    }
+    for token in path {
+        parse_path_token(&token, &mut line, &mut lines).unwrap();
+    };
 
     // Path parsing is done, add previously parsing line if valid
     if line.is_valid() {
@@ -255,37 +242,26 @@ fn parse_path(mut path: path::Tokenizer) -> Vec<Polyline> {
 }
 
 /// Parse an SVG string into a vector of polylines.
-pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
-    // Vector that will hold resulting polylines
-    let mut polylines = Vec::new();
-
+pub fn parse(svg: &str) -> Vec<Polyline> {
     // Tokenize the SVG strings into svg::Token instances
-    let mut tokenizer = svg::Tokenizer::from_str(&svg);
+    let tokenizer = Tokenizer::from_str(&svg);
 
     // Loop over all tokens and parse the apths
-    loop {
-        match tokenizer.parse_next() {
-            Ok(t) => {
-                match t {
-                    svg::Token::SvgAttribute(id, textframe) => {
-                        // Process only 'd' attributes
-                        if id == AttributeId::D {
-                            let path = path::Tokenizer::from_frame(textframe);
-                            polylines.extend(parse_path(path));
-                        }
-                    },
-                    svg::Token::EndOfStream => break,
-                    _ => { },
+    tokenizer
+        .filter_map(|t| match t {
+            Ok(Token::Attribute(id, textframe)) => {
+                // Process only 'd' attributes
+                if id == svgparser::svg::Name::Svg(AttributeId::D) {
+                    let path = path::Tokenizer::from_span(textframe);
+                    Some(parse_path(path))
+                } else {
+                    None
                 }
             },
-            Err(e) => {
-                println!("Error: {:?}", e);
-                return Err(e.to_string());
-            }
-        }
-    }
-
-    Ok(polylines)
+            _ => None,
+        })
+        .flat_map(|v| v.into_iter())
+        .collect()
 }
 
 #[cfg(test)]
@@ -437,7 +413,7 @@ mod tests {
                 <path d="M 113,35 H 40 L -39,49 H 40" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 4);
         assert_eq!(result[0][0], (113., 35.).into());
@@ -454,7 +430,7 @@ mod tests {
                 <path d="M 10,10 20,15 10,20 Z" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 4);
         assert_eq!(result[0][0], (10., 10.).into());
@@ -480,7 +456,7 @@ mod tests {
                 <path d="M 10,10 20,15 10,20 Z m 0,40 H 0" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input);
         assert_eq!(result.len(), 2);
 
         assert_eq!(result[0].len(), 4);
