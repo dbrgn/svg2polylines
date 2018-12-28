@@ -18,8 +18,9 @@ edition = "2018"
 default = []
 
 [dependencies]
+euclid = "0.19"
 log = "^0.4"
-lyon_bezier = "^0.5"
+lyon_geom = "0.12"
 quick-xml = "0.12"
 serde = { version = "1.0", optional = true, features = ["derive"] }
 svgtypes = "0.3"

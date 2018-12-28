@@ -21,8 +21,9 @@ use std::convert;
 use std::mem;
 use std::str;
 
+use euclid::Point2D;
 use log::trace;
-use lyon_bezier::{QuadraticBezierSegment, CubicBezierSegment, Vec2};
+use lyon_geom::{QuadraticBezierSegment, CubicBezierSegment};
 use quick_xml::Result as XmlResult;
 use quick_xml::events::Event;
 use quick_xml::events::attributes::Attribute;
@@ -31,7 +32,7 @@ use svgtypes::{PathParser, PathSegment};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-const FLATTENING_TOLERANCE: f32 = 0.15;
+const FLATTENING_TOLERANCE: f64 = 0.15;
 
 /// A CoordinatePair consists of an x and y coordinate.
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -257,21 +258,21 @@ fn parse_path_segment(
                 .ok_or("Invalid state: CurveTo on empty CurrentLine")?;
             let curve = if abs {
                 CubicBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl1: Vec2::new(x1 as f32, y1 as f32),
-                    ctrl2: Vec2::new(x2 as f32, y2 as f32),
-                    to: Vec2::new(x as f32, y as f32),
+                    from: Point2D::new(current.x, current.y),
+                    ctrl1: Point2D::new(x1, y1),
+                    ctrl2: Point2D::new(x2, y2),
+                    to: Point2D::new(x, y),
                 }
             } else {
                 CubicBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl1: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
-                    ctrl2: Vec2::new((current.x + x2) as f32, (current.y + y2) as f32),
-                    to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
+                    from: Point2D::new(current.x, current.y),
+                    ctrl1: Point2D::new(current.x + x1, current.y + y1),
+                    ctrl2: Point2D::new(current.x + x2, current.y + y2),
+                    to: Point2D::new(current.x + x, current.y + y),
                 }
             };
-            for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
-                current_line.add_absolute(CoordinatePair::new(f64::from(point.x), f64::from(point.y)));
+            for point in curve.flattened(FLATTENING_TOLERANCE) {
+                current_line.add_absolute(CoordinatePair::new(point.x, point.y));
             }
         },
         &PathSegment::Quadratic { abs, x1, y1, x, y } => {
@@ -280,19 +281,19 @@ fn parse_path_segment(
                 .ok_or("Invalid state: Quadratic on empty CurrentLine")?;
             let curve = if abs {
                 QuadraticBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl: Vec2::new(x1 as f32, y1 as f32),
-                    to: Vec2::new(x as f32, y as f32),
+                    from: Point2D::new(current.x, current.y),
+                    ctrl: Point2D::new(x1, y1),
+                    to: Point2D::new(x, y),
                 }
             } else {
                 QuadraticBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
-                    to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
+                    from: Point2D::new(current.x, current.y),
+                    ctrl: Point2D::new(current.x + x1, current.y + y1),
+                    to: Point2D::new(current.x + x, current.y + y),
                 }
             };
-            for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
-                current_line.add_absolute(CoordinatePair::new(f64::from(point.x), f64::from(point.y)));
+            for point in curve.flattened(FLATTENING_TOLERANCE) {
+                current_line.add_absolute(CoordinatePair::new(point.x, point.y));
             }
         },
         &PathSegment::ClosePath { .. } => {
@@ -423,7 +424,6 @@ mod tests {
     }
 
     #[test]
-    /// Parse segment data with HorizontalLineTo / VerticalLineTo entries
     fn test_parse_segment_data_unsupported() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
@@ -612,5 +612,35 @@ mod tests {
             result.unwrap_err(),
             "Error when parsing XML: Expecting </svg> found </baa>".to_string()
         );
+    }
+
+    /// Test the flattening of a quadratic curve.
+    ///
+    /// Note: This test may break if lyon_geom adapts the flattening algorithm.
+    /// It should not break otherwise. When in doubt, check an example visually.
+    #[test]
+    fn test_quadratic_curve() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="m 0.10650371,93.221877 c 0,0 3.74188519,-5.078118 9.62198629,-3.474499 5.880103,1.60362 4.276438,7.216278 4.276438,7.216278"/>
+            </svg>
+        "#;
+        let result = parse(&input).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 11);
+        assert_eq!(result[0], vec![
+            CoordinatePair { x: 0.10650371, y: 93.221877 },
+            CoordinatePair { x: 0.10650371, y: 93.221877 },
+            CoordinatePair { x: 1.0590999115751005, y: 92.1819684952793 },
+            CoordinatePair { x: 5.370943458862083, y: 89.70221166323438 },
+            CoordinatePair { x: 8.823669349110439, y: 89.5489159835669 },
+            CoordinatePair { x: 9.72849, y: 89.74737800000001 },
+            CoordinatePair { x: 12.282201899791776, y: 90.98899075432975 },
+            CoordinatePair { x: 13.679358042116176, y: 92.76458821557513 },
+            CoordinatePair { x: 14.196220298368665, y: 94.94365381717776 },
+            CoordinatePair { x: 14.023847964560911, y: 96.8907337998339 },
+            CoordinatePair { x: 14.004928, y: 96.96365600000001 },
+        ]);
     }
 }
