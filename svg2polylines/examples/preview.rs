@@ -15,7 +15,7 @@ use svg2polylines::Polyline;
 
 fn main() {
     // Logging
-    env_logger::init().expect("Could not initialize env logger");
+    env_logger::init();
 
     // Argument parsing
     let args: Vec<_> = env::args().collect();
