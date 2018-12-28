@@ -22,7 +22,7 @@ log = "^0.4"
 lyon_bezier = "^0.5"
 quick-xml = "0.12"
 serde = { version = "1.0", optional = true, features = ["derive"] }
-svgparser = "0.4"
+svgtypes = "0.3"
 
 [dev-dependencies]
 env_logger = "^0.6"

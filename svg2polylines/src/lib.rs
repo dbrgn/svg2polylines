@@ -21,12 +21,12 @@ use std::convert;
 use std::mem;
 use std::str;
 
-use log::{trace, debug, warn};
+use log::trace;
 use lyon_bezier::{QuadraticBezierSegment, CubicBezierSegment, Vec2};
 use quick_xml::Result as XmlResult;
 use quick_xml::events::Event;
 use quick_xml::events::attributes::Attribute;
-use svgparser::{svg, path, AttributeId, Tokenize};
+use svgtypes::{PathParser, PathSegment};
 
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
@@ -142,117 +142,6 @@ impl CurrentLine {
     }
 }
 
-fn parse_path_token(data: &path::Token,
-                    current_line: &mut CurrentLine,
-                    lines: &mut Vec<Polyline>) -> Result<(), String> {
-    match data {
-        &path::Token::MoveTo { abs, x, y } => {
-            if current_line.is_valid() {
-                lines.push(current_line.finish());
-            }
-            current_line.add(abs, CoordinatePair::new(x, y));
-        },
-        &path::Token::LineTo { abs, x, y } => {
-            current_line.add(abs, CoordinatePair::new(x, y));
-        },
-        &path::Token::HorizontalLineTo { abs, x } => {
-            match (current_line.last_y(), abs) {
-                (Some(y), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
-                (Some(_), false) => current_line.add_relative(CoordinatePair::new(x, 0.0)),
-                (None, _) => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
-            }
-        },
-        &path::Token::VerticalLineTo { abs, y } => {
-            match (current_line.last_x(), abs) {
-                (Some(x), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
-                (Some(_), false) => current_line.add_relative(CoordinatePair::new(0.0, y)),
-                (None, _) => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
-            }
-        },
-        &path::Token::CurveTo { abs, x1, y1, x2, y2, x, y } => {
-            let current = current_line.last_pair()
-                .ok_or("Invalid state: CurveTo on empty CurrentLine")?;
-            let curve = if abs {
-                CubicBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl1: Vec2::new(x1 as f32, y1 as f32),
-                    ctrl2: Vec2::new(x2 as f32, y2 as f32),
-                    to: Vec2::new(x as f32, y as f32),
-                }
-            } else {
-                CubicBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl1: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
-                    ctrl2: Vec2::new((current.x + x2) as f32, (current.y + y2) as f32),
-                    to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
-                }
-            };
-            for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
-                current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
-            }
-        },
-        &path::Token::Quadratic { abs, x1, y1, x, y } => {
-            let current = current_line.last_pair()
-                .ok_or("Invalid state: Quadratic on empty CurrentLine")?;
-            let curve = if abs {
-                QuadraticBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl: Vec2::new(x1 as f32, y1 as f32),
-                    to: Vec2::new(x as f32, y as f32),
-                }
-            } else {
-                QuadraticBezierSegment {
-                    from: Vec2::new(current.x as f32, current.y as f32),
-                    ctrl: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
-                    to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
-                }
-            };
-            for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
-                current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
-            }
-        },
-        &path::Token::ClosePath { .. } => {
-            current_line.close().map_err(|e| format!("Invalid state: {}", e))?;
-        },
-        d @ _ => {
-            return Err(format!("Unsupported token: {:?}", d));
-        }
-    }
-    Ok(())
-}
-
-fn parse_path(mut path: path::Tokenizer) -> Vec<Polyline> {
-    debug!("New path");
-
-    let mut lines = Vec::new();
-
-    let mut line = CurrentLine::new();
-    loop {
-        match path.parse_next() {
-            Ok(token) => {
-                match token {
-                    // If we reach the end of the token stream, stop parsing
-                    path::Token::EndOfStream => break,
-
-                    // Otherwise, parse this token
-                    t @ _ => parse_path_token(&t, &mut line, &mut lines).unwrap(),
-                }
-            },
-            Err(e) => {
-                warn!("Error while parsing path: {}", e);
-                break;
-            },
-        }
-    }
-
-    // Path parsing is done, add previously parsing line if valid
-    if line.is_valid() {
-        lines.push(line.finish());
-    }
-
-    lines
-}
-
 /// Parse an SVG string, return vector of path expressions.
 fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
     trace!("parse_xml");
@@ -305,44 +194,140 @@ fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
     Ok(paths)
 }
 
-/// Parse an SVG string into a vector of polylines.
-pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
-    // Vector that will hold resulting polylines
-    let mut polylines = Vec::new();
+fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
+    trace!("parse_path");
+    let mut lines = Vec::new();
+    let mut line = CurrentLine::new();
 
-    // Tokenize the SVG strings into svg::Token instances
-    let mut tokenizer = svg::Tokenizer::from_str(&svg);
-
-    // Loop over all tokens and parse the apths
-    loop {
-        match tokenizer.parse_next() {
-            Ok(t) => {
-                match t {
-                    svg::Token::SvgAttribute(id, textframe) => {
-                        // Process only 'd' attributes
-                        if id == AttributeId::D {
-                            let path = path::Tokenizer::from_frame(textframe);
-                            polylines.extend(parse_path(path));
-                        }
-                    },
-                    svg::Token::EndOfStream => break,
-                    _ => { },
-                }
-            },
-            Err(e) => {
-                println!("Error: {:?}", e);
-                return Err(e.to_string());
-            }
-        }
+    // Process segments in path expression
+    for segment in PathParser::from(expr) {
+        parse_path_segment(
+            &segment.map_err(|e| format!("Could not parse path segment: {}", e))?,
+            &mut line,
+            &mut lines,
+        )?;
     }
 
+    // Path parsing is done, add previously parsing line if valid
+    if line.is_valid() {
+        lines.push(line.finish());
+    }
+
+    Ok(lines)
+}
+
+fn parse_path_segment(
+    segment: &PathSegment,
+    current_line: &mut CurrentLine,
+    lines: &mut Vec<Polyline>,
+) -> Result<(), String> {
+    trace!("parse_path_segment");
+    match segment {
+        &PathSegment::MoveTo { abs, x, y } => {
+            trace!("parse_path_segment: MoveTo");
+            if current_line.is_valid() {
+                lines.push(current_line.finish());
+            }
+            current_line.add(abs, CoordinatePair::new(x, y));
+        },
+        &PathSegment::LineTo { abs, x, y } => {
+            trace!("parse_path_segment: LineTo");
+            current_line.add(abs, CoordinatePair::new(x, y));
+        },
+        &PathSegment::HorizontalLineTo { abs, x } => {
+            trace!("parse_path_segment: HorizontalLineTo");
+            match (current_line.last_y(), abs) {
+                (Some(y), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
+                (Some(_), false) => current_line.add_relative(CoordinatePair::new(x, 0.0)),
+                (None, _) => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
+            }
+        },
+        &PathSegment::VerticalLineTo { abs, y } => {
+            trace!("parse_path_segment: VerticalLineTo");
+            match (current_line.last_x(), abs) {
+                (Some(x), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
+                (Some(_), false) => current_line.add_relative(CoordinatePair::new(0.0, y)),
+                (None, _) => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
+            }
+        },
+        &PathSegment::CurveTo { abs, x1, y1, x2, y2, x, y } => {
+            trace!("parse_path_segment: CurveTo");
+            let current = current_line.last_pair()
+                .ok_or("Invalid state: CurveTo on empty CurrentLine")?;
+            let curve = if abs {
+                CubicBezierSegment {
+                    from: Vec2::new(current.x as f32, current.y as f32),
+                    ctrl1: Vec2::new(x1 as f32, y1 as f32),
+                    ctrl2: Vec2::new(x2 as f32, y2 as f32),
+                    to: Vec2::new(x as f32, y as f32),
+                }
+            } else {
+                CubicBezierSegment {
+                    from: Vec2::new(current.x as f32, current.y as f32),
+                    ctrl1: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
+                    ctrl2: Vec2::new((current.x + x2) as f32, (current.y + y2) as f32),
+                    to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
+                }
+            };
+            for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
+                current_line.add_absolute(CoordinatePair::new(f64::from(point.x), f64::from(point.y)));
+            }
+        },
+        &PathSegment::Quadratic { abs, x1, y1, x, y } => {
+            trace!("parse_path_segment: Quadratic");
+            let current = current_line.last_pair()
+                .ok_or("Invalid state: Quadratic on empty CurrentLine")?;
+            let curve = if abs {
+                QuadraticBezierSegment {
+                    from: Vec2::new(current.x as f32, current.y as f32),
+                    ctrl: Vec2::new(x1 as f32, y1 as f32),
+                    to: Vec2::new(x as f32, y as f32),
+                }
+            } else {
+                QuadraticBezierSegment {
+                    from: Vec2::new(current.x as f32, current.y as f32),
+                    ctrl: Vec2::new((current.x + x1) as f32, (current.y + y1) as f32),
+                    to: Vec2::new((current.x + x) as f32, (current.y + y) as f32),
+                }
+            };
+            for point in curve.flattening_iter(FLATTENING_TOLERANCE) {
+                current_line.add_absolute(CoordinatePair::new(f64::from(point.x), f64::from(point.y)));
+            }
+        },
+        &PathSegment::ClosePath { .. } => {
+            trace!("parse_path_segment: ClosePath");
+            current_line.close().map_err(|e| format!("Invalid state: {}", e))?;
+        },
+        other => {
+            return Err(format!("Unsupported path segment: {:?}", other));
+        }
+    }
+    Ok(())
+}
+
+
+/// Parse an SVG string into a vector of polylines.
+pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
+    trace!("parse");
+
+    // Parse the XML string into a list of path expressions
+    let path_exprs = parse_xml(svg)?;
+    trace!("parse: Found {} path expressions", path_exprs.len());
+
+    // Vector that will hold resulting polylines
+    let mut polylines: Vec<Polyline> = Vec::new();
+
+    // Process path expressions
+    for expr in path_exprs {
+        polylines.extend(parse_path(&expr)?);
+    }
+
+    trace!("parse: This results in {} polylines", polylines.len());
     Ok(polylines)
 }
 
 #[cfg(test)]
 mod tests {
-    use svgparser::path::Token;
-
     use super::*;
 
     #[test]
@@ -385,17 +370,17 @@ mod tests {
     fn test_parse_segment_data() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_token(&Token::MoveTo {
+        parse_path_segment(&PathSegment::MoveTo {
             abs: true,
             x: 1.0,
             y: 2.0,
         }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::LineTo {
+        parse_path_segment(&PathSegment::LineTo {
             abs: true,
             x: 2.0,
             y: 3.0,
         }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::LineTo {
+        parse_path_segment(&PathSegment::LineTo {
             abs: true,
             x: 3.0,
             y: 2.0,
@@ -414,16 +399,16 @@ mod tests {
     fn test_parse_segment_data_horizontal_vertical() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_token(&Token::MoveTo {
+        parse_path_segment(&PathSegment::MoveTo {
             abs: true,
             x: 1.0,
             y: 2.0,
         }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::HorizontalLineTo {
+        parse_path_segment(&PathSegment::HorizontalLineTo {
             abs: true,
             x: 3.0,
         }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::VerticalLineTo {
+        parse_path_segment(&PathSegment::VerticalLineTo {
             abs: true,
             y: -1.0,
         }, &mut current_line, &mut lines).unwrap();
@@ -441,12 +426,12 @@ mod tests {
     fn test_parse_segment_data_unsupported() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_token(&Token::MoveTo {
+        parse_path_segment(&PathSegment::MoveTo {
             abs: true,
             x: 1.0,
             y: 2.0,
         }, &mut current_line, &mut lines).unwrap();
-        let result = parse_path_token(&Token::SmoothQuadratic {
+        let result = parse_path_segment(&PathSegment::SmoothQuadratic {
             abs: true,
             x: 3.0,
             y: 4.0,
@@ -463,13 +448,13 @@ mod tests {
     fn test_parse_segment_data_multiple() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 2.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::LineTo { abs: true, x: 2.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::LineTo { abs: true, x: 2.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::LineTo { abs: true, x: 2.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 2.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
         assert_eq!(lines.len(), 3);
         assert_eq!(current_line.is_valid(), false);
         let finished = current_line.finish();
@@ -478,6 +463,7 @@ mod tests {
 
     #[test]
     fn test_parse_simple_absolute_nonclosed() {
+        let _ = env_logger::try_init();
         let input = r#"
             <?xml version="1.0" encoding="UTF-8" standalone="no"?>
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
@@ -495,6 +481,7 @@ mod tests {
 
     #[test]
     fn test_parse_simple_absolute_closed() {
+        let _ = env_logger::try_init();
         let input = r#"
             <?xml version="1.0" encoding="UTF-8" standalone="no"?>
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
