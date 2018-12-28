@@ -21,8 +21,11 @@ use std::convert;
 use std::mem;
 use std::str;
 
-use log::{debug, warn};
+use log::{trace, debug, warn};
 use lyon_bezier::{QuadraticBezierSegment, CubicBezierSegment, Vec2};
+use quick_xml::Result as XmlResult;
+use quick_xml::events::Event;
+use quick_xml::events::attributes::Attribute;
 use svgparser::{svg, path, AttributeId, Tokenize};
 
 #[cfg(feature = "serde")]
@@ -248,6 +251,58 @@ fn parse_path(mut path: path::Tokenizer) -> Vec<Polyline> {
     }
 
     lines
+}
+
+/// Parse an SVG string, return vector of path expressions.
+fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
+    trace!("parse_xml");
+
+    let mut reader = quick_xml::Reader::from_str(svg);
+    reader.trim_text(true);
+
+    let mut paths = Vec::new();
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event(&mut buf) {
+            Ok(Event::Start(ref e)) |
+            Ok(Event::Empty(ref e)) => {
+                trace!("parse_xml: Matched start of {:?}", e.name());
+                match e.name() {
+                    b"path" => {
+                        trace!("parse_xml: Found path attribute");
+                        let path_expr: Option<String> = e
+                            .attributes()
+                            .filter_map(|a: XmlResult<Attribute>| a.ok())
+                            .filter_map(|attr: Attribute| {
+                                if attr.key == b"d" {
+                                    attr.unescaped_value()
+                                        .ok()
+                                        .and_then(|v| str::from_utf8(&v).map(str::to_string).ok())
+                                } else {
+                                    None
+                                }
+                            })
+                            .next();
+                        if let Some(expr) = path_expr {
+                            paths.push(expr);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Eof) => {
+                trace!("parse_xml: EOF");
+                break;
+            },
+            Err(e) => return Err(format!("Error when parsing XML: {}", e)),
+            _ => {},
+        }
+
+        // If we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
+        buf.clear();
+    }
+    trace!("parse_xml: Return {} paths", paths.len());
+    Ok(paths)
 }
 
 /// Parse an SVG string into a vector of polylines.
@@ -486,4 +541,62 @@ mod tests {
         assert_eq!(result[1][1], (0., 50.).into());
     }
 
+    #[test]
+    fn test_parse_xml_single() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M 10,100 40,70 h 10 m -20,40 10,-20" />
+            </svg>
+        "#;
+        let result = parse_xml(&input).unwrap();
+        assert_eq!(result, vec!["M 10,100 40,70 h 10 m -20,40 10,-20".to_string()]);
+    }
+
+    #[test]
+    fn test_parse_xml_multiple() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M 10,100 40,70 h 10 m -20,40 10,-20" />
+                <path d="M 20,30" />
+            </svg>
+        "#;
+        let result = parse_xml(&input).unwrap();
+        assert_eq!(result, vec![
+            "M 10,100 40,70 h 10 m -20,40 10,-20".to_string(),
+            "M 20,30".to_string(),
+        ]);
+    }
+
+    /// If multiple "d" attributes are found, simply use the first one.
+    #[test]
+    fn test_parse_xml_duplicate_attr() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M 20,30" d="M 10,100 40,70 h 10 m -20,40 10,-20"/>
+            </svg>
+        "#;
+        let result = parse_xml(&input).unwrap();
+        assert_eq!(result, vec!["M 20,30".to_string()]);
+    }
+
+    #[test]
+    fn test_parse_xml_malformed() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M 20,30" d="M 10,100 40,70 h 10 m -20,40 10,-20"/>
+            </baa>
+        "#;
+        let result = parse_xml(&input);
+        assert_eq!(
+            result.unwrap_err(),
+            "Error when parsing XML: Expecting </svg> found </baa>".to_string()
+        );
+    }
 }
