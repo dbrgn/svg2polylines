@@ -17,6 +17,10 @@
 //! 
 //! You can optionally get serde 1 support by enabling the `serde` feature.
 
+#![deny(clippy::all)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::single_match)]
+
 use std::convert;
 use std::mem;
 use std::str;
@@ -34,7 +38,7 @@ use serde::{Serialize, Deserialize};
 
 const FLATTENING_TOLERANCE: f64 = 0.15;
 
-/// A CoordinatePair consists of an x and y coordinate.
+/// A `CoordinatePair` consists of an x and y coordinate.
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
@@ -45,13 +49,13 @@ pub struct CoordinatePair {
 
 impl CoordinatePair {
     fn new(x: f64, y: f64) -> Self {
-        CoordinatePair { x: x, y: y }
+        Self { x, y }
     }
 }
 
 impl convert::From<(f64, f64)> for CoordinatePair {
-    fn from(val: (f64, f64)) -> CoordinatePair {
-        CoordinatePair { x: val.0, y: val.1 }
+    fn from(val: (f64, f64)) -> Self {
+        Self { x: val.0, y: val.1 }
     }
 }
 
@@ -71,7 +75,7 @@ struct CurrentLine {
 /// Simple data structure that acts as a Polyline buffer.
 impl CurrentLine {
     fn new() -> Self {
-        CurrentLine {
+        Self {
             line: Polyline::new(),
             prev_end: None,
         }
@@ -329,6 +333,7 @@ pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unreadable_literal)]
 mod tests {
     use super::*;
 
@@ -368,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    /// Parse segment data with a single MoveTo and three coordinates
+    /// Parse segment data with a single `MoveTo` and three coordinates
     fn test_parse_segment_data() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
@@ -397,7 +402,7 @@ mod tests {
     }
 
     #[test]
-    /// Parse segment data with HorizontalLineTo / VerticalLineTo entries
+    /// Parse segment data with `HorizontalLineTo` / `VerticalLineTo` entries
     fn test_parse_segment_data_horizontal_vertical() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
@@ -445,7 +450,7 @@ mod tests {
     }
 
     #[test]
-    /// Parse segment data with multiple MoveTo commands
+    /// Parse segment data with multiple `MoveTo` commands
     fn test_parse_segment_data_multiple() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
@@ -616,7 +621,7 @@ mod tests {
 
     /// Test the flattening of a quadratic curve.
     ///
-    /// Note: This test may break if lyon_geom adapts the flattening algorithm.
+    /// Note: This test may break if `lyon_geom` adapts the flattening algorithm.
     /// It should not break otherwise. When in doubt, check an example visually.
     #[test]
     fn test_quadratic_curve() {
