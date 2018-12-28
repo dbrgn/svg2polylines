@@ -83,7 +83,7 @@ impl CurrentLine {
 
     /// Add a relative CoordinatePair to the internal polyline.
     fn add_relative(&mut self, pair: CoordinatePair) {
-        if let Some(last) = self.line.last().cloned() {
+        if let Some(last) = self.line.last() {
             self.add_absolute(CoordinatePair::new(last.x + pair.x, last.y + pair.y));
         } else if let Some(last) = self.prev_end {
             self.add_absolute(CoordinatePair::new(last.x + pair.x, last.y + pair.y));
@@ -136,6 +136,7 @@ impl CurrentLine {
     /// Replace the internal polyline with a new instance and return the
     /// previously stored polyline.
     fn finish(&mut self) -> Polyline {
+        self.prev_end = self.line.last().cloned();
         let mut tmp = Polyline::new();
         mem::swap(&mut self.line, &mut tmp);
         tmp
@@ -526,6 +527,32 @@ mod tests {
         assert_eq!(result[1].len(), 2);
         assert_eq!(result[1][0], (10., 50.).into());
         assert_eq!(result[1][1], (0., 50.).into());
+    }
+
+    #[test]
+    fn test_regression_issue_7() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M 10,100 40,70 h 10 m -20,40 10,-20" />
+            </svg>
+        "#;
+        let result = parse(&input).unwrap();
+
+        // 2 Polylines
+        assert_eq!(result.len(), 2);
+
+        // First line has three points
+        assert_eq!(result[0].len(), 3);
+        assert_eq!(result[0][0], (10., 100.).into());
+        assert_eq!(result[0][1], (40., 70.).into());
+        assert_eq!(result[0][2], (50., 70.).into());
+
+        // First line has two points
+        assert_eq!(result[1].len(), 2);
+        assert_eq!(result[1][0], (30., 110.).into());
+        assert_eq!(result[1][1], (40., 90.).into());
     }
 
     #[test]
