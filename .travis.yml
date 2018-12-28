@@ -1,9 +1,10 @@
 sudo: false
 language: rust
 rust:
-  - 1.16.0
+  - 1.31.1
   - stable
   - nightly
+cache: cargo
 matrix:
   allow_failures:
     - rust: nightly
@@ -12,6 +13,7 @@ script:
   - cd svg2polylines
   - cargo build
   - cargo test
+  - cargo test --features serde
   - cd ../svg2polylines-ffi
   - cargo build
   - cargo test

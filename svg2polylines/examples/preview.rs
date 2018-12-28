@@ -1,17 +1,13 @@
-extern crate drag_controller;
-extern crate env_logger;
-extern crate piston_window;
-extern crate svg2polylines;
-
 use std::env;
 use std::fs;
 use std::io::Read;
 use std::process::exit;
 
 use drag_controller::{DragController, Drag};
+use env_logger;
 use piston_window::{PistonWindow, WindowSettings, OpenGL, Transformed, clear, line};
 use piston_window::math::Matrix2d;
-use svg2polylines::Polyline;
+use svg2polylines::{self, Polyline};
 
 fn main() {
     // Logging

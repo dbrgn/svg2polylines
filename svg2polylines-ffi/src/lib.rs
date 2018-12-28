@@ -1,8 +1,5 @@
 #![crate_type = "dylib"]
 
-extern crate libc;
-extern crate svg2polylines;
-
 use std::mem;
 use std::ffi::CStr;
 

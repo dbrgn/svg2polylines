@@ -11,6 +11,7 @@ include = [
     "README.md",
     "LICENSE-*",
 ]
+edition = "2018"
 
 [lib]
 name = "svg2polylines"

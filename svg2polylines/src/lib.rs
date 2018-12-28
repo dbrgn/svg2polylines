@@ -10,33 +10,29 @@
 //! **Note: Currently the path style is completely ignored. Only the path itself is
 //! returned.**
 //! 
-//! Minimal supported Rust version: 1.16.
+//! Minimal supported Rust version: 1.31 (Rust 2018).
 //! 
 //! FFI bindings for this crate can be found [on
 //! Github](https://github.com/dbrgn/svg2polylines).
 //! 
-//! You can optionally get serde 1 support by enabling the `use_serde` feature.
-#[macro_use] extern crate log;
-extern crate svgparser;
-extern crate lyon_bezier;
-
-#[cfg(feature="use_serde")]
-extern crate serde;
-#[cfg(feature="use_serde")]
-#[macro_use] extern crate serde_derive;
+//! You can optionally get serde 1 support by enabling the `serde` feature.
 
 use std::convert;
 use std::mem;
 use std::str;
 
-use svgparser::{svg, path, AttributeId, Tokenize};
+use log::{debug, warn};
 use lyon_bezier::{QuadraticBezierSegment, CubicBezierSegment, Vec2};
+use svgparser::{svg, path, AttributeId, Tokenize};
+
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 
 const FLATTENING_TOLERANCE: f32 = 0.15;
 
 /// A CoordinatePair consists of an x and y coordinate.
 #[derive(Debug, PartialEq, Copy, Clone)]
-#[cfg_attr(feature = "use_serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
 pub struct CoordinatePair {
     pub x: f64,
@@ -290,10 +286,6 @@ pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
 
 #[cfg(test)]
 mod tests {
-    extern crate svgparser;
-    #[cfg(feature="use_serde")]
-    extern crate serde_json;
-
     use svgparser::path::Token;
 
     use super::*;

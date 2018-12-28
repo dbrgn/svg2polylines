@@ -1,12 +1,10 @@
-extern crate env_logger;
-extern crate svg2polylines;
-
 use std::env;
 use std::fs;
 use std::io::Read;
 use std::process::exit;
 
-use svg2polylines::Polyline;
+use env_logger;
+use svg2polylines::{self, Polyline};
 
 fn main() {
     // Logging
