@@ -1,3 +1,5 @@
+#![allow(clippy::clone_on_copy)]
+
 use std::env;
 use std::fs;
 use std::io::Read;
