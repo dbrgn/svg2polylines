@@ -20,7 +20,6 @@ edition = "2018"
 default = []
 
 [dependencies]
-euclid = "0.19"
 log = "^0.4"
 lyon_geom = "0.12"
 quick-xml = "0.12"

@@ -25,9 +25,9 @@ use std::convert;
 use std::mem;
 use std::str;
 
-use euclid::Point2D;
 use log::trace;
 use lyon_geom::{QuadraticBezierSegment, CubicBezierSegment};
+use lyon_geom::euclid::Point2D;
 use quick_xml::Result as XmlResult;
 use quick_xml::events::Event;
 use quick_xml::events::attributes::Attribute;
