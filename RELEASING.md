@@ -27,5 +27,5 @@ Commit & tag:
 
 Publish:
 
-    $ cargo publish
+    $ cd svg2polylines && cargo publish
     $ git push && git push --tags
