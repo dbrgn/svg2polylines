@@ -206,9 +206,13 @@ fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
     let mut line = CurrentLine::new();
 
     // Process segments in path expression
+    let mut prev_segment_store: Option<PathSegment> = None;
     for segment in PathParser::from(expr) {
+        let current_segment = segment.map_err(|e| format!("Could not parse path segment: {}", e))?;
+        let prev_segment = prev_segment_store.replace(current_segment);
         parse_path_segment(
-            &segment.map_err(|e| format!("Could not parse path segment: {}", e))?,
+            &current_segment,
+            prev_segment,
             &mut line,
             &mut lines,
         )?;
@@ -222,8 +226,43 @@ fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
     Ok(lines)
 }
 
+/// Helper method for parsing both `CurveTo` and `SmoothCurveTo`.
+fn _handle_cubic_curve(
+    current_line: &mut CurrentLine,
+    abs: bool,
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    x: f64,
+    y: f64,
+) -> Result<(), String> {
+    let current = current_line.last_pair()
+        .ok_or("Invalid state: CurveTo or SmoothCurveTo on empty CurrentLine")?;
+    let curve = if abs {
+        CubicBezierSegment {
+            from: Point2D::new(current.x, current.y),
+            ctrl1: Point2D::new(x1, y1),
+            ctrl2: Point2D::new(x2, y2),
+            to: Point2D::new(x, y),
+        }
+    } else {
+        CubicBezierSegment {
+            from: Point2D::new(current.x, current.y),
+            ctrl1: Point2D::new(current.x + x1, current.y + y1),
+            ctrl2: Point2D::new(current.x + x2, current.y + y2),
+            to: Point2D::new(current.x + x, current.y + y),
+        }
+    };
+    for point in curve.flattened(FLATTENING_TOLERANCE) {
+        current_line.add_absolute(CoordinatePair::new(point.x, point.y));
+    }
+    Ok(())
+}
+
 fn parse_path_segment(
     segment: &PathSegment,
+    prev_segment: Option<PathSegment>,
     current_line: &mut CurrentLine,
     lines: &mut Vec<Polyline>,
 ) -> Result<(), String> {
@@ -258,25 +297,38 @@ fn parse_path_segment(
         },
         &PathSegment::CurveTo { abs, x1, y1, x2, y2, x, y } => {
             trace!("parse_path_segment: CurveTo");
-            let current = current_line.last_pair()
-                .ok_or("Invalid state: CurveTo on empty CurrentLine")?;
-            let curve = if abs {
-                CubicBezierSegment {
-                    from: Point2D::new(current.x, current.y),
-                    ctrl1: Point2D::new(x1, y1),
-                    ctrl2: Point2D::new(x2, y2),
-                    to: Point2D::new(x, y),
-                }
-            } else {
-                CubicBezierSegment {
-                    from: Point2D::new(current.x, current.y),
-                    ctrl1: Point2D::new(current.x + x1, current.y + y1),
-                    ctrl2: Point2D::new(current.x + x2, current.y + y2),
-                    to: Point2D::new(current.x + x, current.y + y),
-                }
-            };
-            for point in curve.flattened(FLATTENING_TOLERANCE) {
-                current_line.add_absolute(CoordinatePair::new(point.x, point.y));
+            _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
+        },
+        &PathSegment::SmoothCurveTo { abs, x2, y2, x, y } => {
+            trace!("parse_path_segment: SmoothCurveTo");
+
+            // Who on earth thought it would be a good idea to add a shortcut
+            // for curves with a mirrored control point? It generally makes
+            // implementations much more complex, while the data is perfectly
+            // equivalent to a fully written-out cubic curve m(
+            match prev_segment {
+                Some(PathSegment::CurveTo { x2: prev_x2, y2: prev_y2, x: prev_x, y: prev_y, .. }) |
+                Some(PathSegment::SmoothCurveTo { x2: prev_x2, y2: prev_y2, x: prev_x, y: prev_y, .. }) => {
+                    // We have a previous curve. Mirror the previous control
+                    // point 2 along the previous end point.
+                    let dx = prev_x - prev_x2;
+                    let dy = prev_y - prev_y2;
+                    let x1 = prev_x2 + 2.0 * dx;
+                    let y1 = prev_y2 + 2.0 * dy;
+                    _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
+                },
+                Some(_) | None => {
+                    // The previous segment was not a curve. Use the current
+                    // point as reference.
+                    match current_line.last_pair() {
+                        Some(pair) => {
+                            let x1 = pair.x;
+                            let y1 = pair.y;
+                            _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
+                        },
+                        None => return Err("Invalid state: SmoothCurveTo without a reference point".into()),
+                    }
+                },
             }
         },
         &PathSegment::Quadratic { abs, x1, y1, x, y } => {
@@ -381,17 +433,17 @@ mod tests {
             abs: true,
             x: 1.0,
             y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, None, &mut current_line, &mut lines).unwrap();
         parse_path_segment(&PathSegment::LineTo {
             abs: true,
             x: 2.0,
             y: 3.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, None, &mut current_line, &mut lines).unwrap();
         parse_path_segment(&PathSegment::LineTo {
             abs: true,
             x: 3.0,
             y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, None, &mut current_line, &mut lines).unwrap();
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
@@ -410,15 +462,15 @@ mod tests {
             abs: true,
             x: 1.0,
             y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, None, &mut current_line, &mut lines).unwrap();
         parse_path_segment(&PathSegment::HorizontalLineTo {
             abs: true,
             x: 3.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, None, &mut current_line, &mut lines).unwrap();
         parse_path_segment(&PathSegment::VerticalLineTo {
             abs: true,
             y: -1.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, None, &mut current_line, &mut lines).unwrap();
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
@@ -436,12 +488,12 @@ mod tests {
             abs: true,
             x: 1.0,
             y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
+        }, None, &mut current_line, &mut lines).unwrap();
         let result = parse_path_segment(&PathSegment::SmoothQuadratic {
             abs: true,
             x: 3.0,
             y: 4.0,
-        }, &mut current_line, &mut lines);
+        }, None, &mut current_line, &mut lines);
         assert!(result.is_err());
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
@@ -454,13 +506,13 @@ mod tests {
     fn test_parse_segment_data_multiple() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 2.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 2.0, }, None, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 3.0, }, None, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 3.0, }, None, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 4.0, }, None, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 4.0, }, None, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 5.0, }, None, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 5.0, }, None, &mut current_line, &mut lines).unwrap();
         assert_eq!(lines.len(), 3);
         assert_eq!(current_line.is_valid(), false);
         let finished = current_line.finish();
@@ -646,6 +698,57 @@ mod tests {
             CoordinatePair { x: 14.196220298368665, y: 94.94365381717776 },
             CoordinatePair { x: 14.023847964560911, y: 96.8907337998339 },
             CoordinatePair { x: 14.004928, y: 96.96365600000001 },
+        ]);
+    }
+
+    /// Test the flattening of a mirrored cubic curve (also called "smooth
+    /// curve").
+    ///
+    /// Note: This test may break if `lyon_geom` adapts the flattening algorithm.
+    /// It should not break otherwise. When in doubt, check an example visually.
+    #[test]
+    fn test_smooth_curve() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M10 80 C 40 10, 65 10, 95 80 S 150 150, 180 80"/>
+            </svg>
+        "#;
+        let result = parse(&input).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 31);
+        assert_eq!(result[0], vec![
+            CoordinatePair { x: 10.0, y: 80.0 },
+            CoordinatePair { x: 18.274009596865902, y: 62.23607902107565 },
+            CoordinatePair { x: 25.54854286110641, y: 49.356797920419545 },
+            CoordinatePair { x: 32.00061859514943, y: 40.276471430451714 },
+            CoordinatePair { x: 37.76877706571886, y: 34.14452804422132 },
+            CoordinatePair { x: 42.977786748045155, y: 30.28862586112818 },
+            CoordinatePair { x: 47.75948795454129, y: 28.192810777806955 },
+            CoordinatePair { x: 52.26776775705932, y: 27.50166400871596 },
+            CoordinatePair { x: 56.67911619890174, y: 28.03853054445934 },
+            CoordinatePair { x: 61.17477190430957, y: 29.815620388680145 },
+            CoordinatePair { x: 65.91841423291706, y: 33.02014722137494 },
+            CoordinatePair { x: 71.04736316596855, y: 37.986586554742004 },
+            CoordinatePair { x: 76.67889180557972, y: 45.17533085552483 },
+            CoordinatePair { x: 82.92363487320814, y: 55.16763405833094 },
+            CoordinatePair { x: 89.90077281862139, y: 68.67838317092607 },
+            CoordinatePair { x: 95.0, y: 80.0 },
+            CoordinatePair { x: 103.2740095968659, y: 97.76392097892435 },
+            CoordinatePair { x: 110.5485428611064, y: 110.64320207958045 },
+            CoordinatePair { x: 117.00061859514942, y: 119.72352856954828 },
+            CoordinatePair { x: 122.76877706571884, y: 125.85547195577867 },
+            CoordinatePair { x: 127.97778674804515, y: 129.7113741388718 },
+            CoordinatePair { x: 132.7594879545413, y: 131.80718922219302 },
+            CoordinatePair { x: 137.26776775705935, y: 132.49833599128402 },
+            CoordinatePair { x: 141.67911619890177, y: 131.96146945554065 },
+            CoordinatePair { x: 146.17477190430958, y: 130.18437961131986 },
+            CoordinatePair { x: 150.91841423291706, y: 126.97985277862506 },
+            CoordinatePair { x: 156.04736316596853, y: 122.01341344525798 },
+            CoordinatePair { x: 161.67889180557972, y: 114.82466914447512 },
+            CoordinatePair { x: 167.92363487320813, y: 104.83236594166902 },
+            CoordinatePair { x: 174.90077281862128, y: 91.32161682907416 },
+            CoordinatePair { x: 180.0, y: 80.0 },
         ]);
     }
 }
