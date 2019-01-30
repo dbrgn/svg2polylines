@@ -1,5 +1,9 @@
 # Releasing
 
+Cd into directory:
+
+    $ cd svg2polylines
+
 Run linting:
 
     $ cargo clean && cargo clippy --all-targets --all-features
@@ -11,14 +15,12 @@ Set variables:
 
 Update version numbers:
 
-    $ cd svg2polylines
     $ vim Cargo.toml
     $ cargo update
-    $ cd -
 
 Update changelog:
 
-    $ vim svg2polylines/CHANGELOG.md
+    $ vim CHANGELOG.md
 
 Commit & tag:
 
@@ -27,5 +29,5 @@ Commit & tag:
 
 Publish:
 
-    $ cd svg2polylines && cargo publish
+    $ cargo publish
     $ git push && git push --tags
