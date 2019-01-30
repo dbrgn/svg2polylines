@@ -22,7 +22,7 @@ default = []
 [dependencies]
 log = "^0.4"
 lyon_geom = "0.12"
-quick-xml = "0.12"
+quick-xml = "0.13"
 serde = { version = "1.0", optional = true, features = ["derive"] }
 svgtypes = "0.4"
 
