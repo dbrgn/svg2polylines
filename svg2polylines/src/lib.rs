@@ -227,6 +227,7 @@ fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
 }
 
 /// Helper method for parsing both `CurveTo` and `SmoothCurveTo`.
+#[allow(clippy::too_many_arguments)]
 fn _handle_cubic_curve(
     current_line: &mut CurrentLine,
     abs: bool,
@@ -260,6 +261,7 @@ fn _handle_cubic_curve(
     Ok(())
 }
 
+#[allow(clippy::similar_names)]
 fn parse_path_segment(
     segment: &PathSegment,
     prev_segment: Option<PathSegment>,
