@@ -48,7 +48,7 @@ pub struct CoordinatePair {
 }
 
 impl CoordinatePair {
-    fn new(x: f64, y: f64) -> Self {
+    pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
 }
