@@ -28,7 +28,6 @@ use std::str;
 use log::trace;
 use lyon_geom::{QuadraticBezierSegment, CubicBezierSegment};
 use lyon_geom::euclid::Point2D;
-use quick_xml::Result as XmlResult;
 use quick_xml::events::Event;
 use quick_xml::events::attributes::Attribute;
 use svgtypes::{PathParser, PathSegment};
@@ -168,8 +167,8 @@ fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
                         trace!("parse_xml: Found path attribute");
                         let path_expr: Option<String> = e
                             .attributes()
-                            .filter_map(|a: XmlResult<Attribute>| a.ok())
-                            .filter_map(|attr: Attribute| {
+                            .filter_map(Result::ok)
+                            .find_map(|attr: Attribute| {
                                 if attr.key == b"d" {
                                     attr.unescaped_value()
                                         .ok()
@@ -177,8 +176,7 @@ fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
                                 } else {
                                     None
                                 }
-                            })
-                            .next();
+                            });
                         if let Some(expr) = path_expr {
                             paths.push(expr);
                         }
