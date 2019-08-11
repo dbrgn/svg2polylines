@@ -89,7 +89,8 @@ impl CurrentLine {
     /// Add a relative CoordinatePair to the internal polyline.
     fn add_relative(&mut self, pair: CoordinatePair) {
         if let Some(last) = self.line.last() {
-            self.add_absolute(CoordinatePair::new(last.x + pair.x, last.y + pair.y));
+            let cp = CoordinatePair::new(last.x + pair.x, last.y + pair.y);
+            self.add_absolute(cp);
         } else if let Some(last) = self.prev_end {
             self.add_absolute(CoordinatePair::new(last.x + pair.x, last.y + pair.y));
         } else {
