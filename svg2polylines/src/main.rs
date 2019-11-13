@@ -54,10 +54,14 @@ fn main() {
                 }
                 out.push_str("\r\n");
             }
+            
+            out.push_str("  ]");
+
             if idx != (lines_len - 1) {
                 out.push_str(",");
             }
-            out.push_str("  ]\r\n");
+
+            out.push_str("\r\n");
         }
         out.push_str("]");
 
