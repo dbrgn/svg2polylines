@@ -37,8 +37,6 @@ use svgtypes::{PathParser, PathSegment};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-const FLATTENING_TOLERANCE: f64 = 0.15;
-
 /// A `CoordinatePair` consists of an x and y coordinate.
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -200,7 +198,7 @@ fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
     Ok(paths)
 }
 
-fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
+fn parse_path(expr: &str, tol: f64) -> Result<Vec<Polyline>, String> {
     trace!("parse_path");
     let mut lines = Vec::new();
     let mut line = CurrentLine::new();
@@ -211,7 +209,7 @@ fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
         let current_segment =
             segment.map_err(|e| format!("Could not parse path segment: {}", e))?;
         let prev_segment = prev_segment_store.replace(current_segment);
-        parse_path_segment(&current_segment, prev_segment, &mut line, &mut lines)?;
+        parse_path_segment(&current_segment, prev_segment, &mut line, tol, &mut lines)?;
     }
 
     // Path parsing is done, add previously parsing line if valid
@@ -226,6 +224,7 @@ fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
 #[allow(clippy::too_many_arguments)]
 fn _handle_cubic_curve(
     current_line: &mut CurrentLine,
+    tol: f64,
     abs: bool,
     x1: f64,
     y1: f64,
@@ -252,7 +251,7 @@ fn _handle_cubic_curve(
             to: Point2D::new(current.x + x, current.y + y),
         }
     };
-    for point in curve.flattened(FLATTENING_TOLERANCE) {
+    for point in curve.flattened(tol) {
         current_line.add_absolute(CoordinatePair::new(point.x, point.y));
     }
     Ok(())
@@ -263,6 +262,7 @@ fn parse_path_segment(
     segment: &PathSegment,
     prev_segment: Option<PathSegment>,
     current_line: &mut CurrentLine,
+    tol: f64,
     lines: &mut Vec<Polyline>,
 ) -> Result<(), String> {
     trace!("parse_path_segment");
@@ -308,7 +308,7 @@ fn parse_path_segment(
             y,
         } => {
             trace!("parse_path_segment: CurveTo");
-            _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
+            _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
         }
         &PathSegment::SmoothCurveTo { abs, x2, y2, x, y } => {
             trace!("parse_path_segment: SmoothCurveTo");
@@ -344,7 +344,7 @@ fn parse_path_segment(
                     } else {
                         (dx, dy)
                     };
-                    _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
+                    _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
                 }
                 Some(_) | None => {
                     // The previous segment was not a curve. Use the current
@@ -353,7 +353,7 @@ fn parse_path_segment(
                         Some(pair) => {
                             let x1 = pair.x;
                             let y1 = pair.y;
-                            _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
+                            _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
                         }
                         None => {
                             return Err(
@@ -382,7 +382,7 @@ fn parse_path_segment(
                     to: Point2D::new(current.x + x, current.y + y),
                 }
             };
-            for point in curve.flattened(FLATTENING_TOLERANCE) {
+            for point in curve.flattened(tol) {
                 current_line.add_absolute(CoordinatePair::new(point.x, point.y));
             }
         }
@@ -400,7 +400,7 @@ fn parse_path_segment(
 }
 
 /// Parse an SVG string into a vector of polylines.
-pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
+pub fn parse(svg: &str, tol: f64) -> Result<Vec<Polyline>, String> {
     trace!("parse");
 
     // Parse the XML string into a list of path expressions
@@ -412,7 +412,7 @@ pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
 
     // Process path expressions
     for expr in path_exprs {
-        polylines.extend(parse_path(&expr)?);
+        polylines.extend(parse_path(&expr, tol)?);
     }
 
     trace!("parse: This results in {} polylines", polylines.len());
@@ -423,6 +423,8 @@ pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
 #[allow(clippy::unreadable_literal)]
 mod tests {
     use super::*;
+
+    const FLATTENING_TOLERANCE: f64 = 0.15;
 
     #[test]
     fn test_current_line() {
@@ -478,6 +480,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -489,6 +492,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -500,6 +504,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -525,6 +530,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -532,6 +538,7 @@ mod tests {
             &PathSegment::HorizontalLineTo { abs: true, x: 3.0 },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -539,6 +546,7 @@ mod tests {
             &PathSegment::VerticalLineTo { abs: true, y: -1.0 },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -563,6 +571,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -574,6 +583,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         );
         assert!(result.is_err());
@@ -596,6 +606,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -607,6 +618,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -618,6 +630,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -629,6 +642,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -640,6 +654,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -651,6 +666,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -662,6 +678,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -680,7 +697,7 @@ mod tests {
                 <path d="M 113,35 H 40 L -39,49 H 40" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 4);
         assert_eq!(result[0][0], (113., 35.).into());
@@ -698,7 +715,7 @@ mod tests {
                 <path d="M 10,10 20,15 10,20 Z" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 4);
         assert_eq!(result[0][0], (10., 10.).into());
@@ -724,7 +741,7 @@ mod tests {
                 <path d="M 10,10 20,15 10,20 Z m 0,40 H 0" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 2);
 
         assert_eq!(result[0].len(), 4);
@@ -747,7 +764,7 @@ mod tests {
                 <path d="M 10,100 40,70 h 10 m -20,40 10,-20" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
 
         // 2 Polylines
         assert_eq!(result.len(), 2);
@@ -776,7 +793,7 @@ mod tests {
                 <path d="M 10 20 c 0 0 1 -3 2 -5 s -10 -8 -2 5 z" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 4);
         assert_eq!(result[0], result[1]);
         assert_eq!(result[0], result[2]);
@@ -860,7 +877,7 @@ mod tests {
                 <path d="m 0.10650371,93.221877 c 0,0 3.74188519,-5.078118 9.62198629,-3.474499 5.880103,1.60362 4.276438,7.216278 4.276438,7.216278"/>
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 11);
         assert_eq!(
@@ -927,7 +944,7 @@ mod tests {
                 <path d="M10 80 C 40 10, 65 10, 95 80 S 150 150, 180 80"/>
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 31);
         assert_eq!(

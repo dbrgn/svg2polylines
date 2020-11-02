@@ -3,7 +3,7 @@
 use std::ffi::CStr;
 use std::mem;
 
-use libc::{c_char, size_t};
+use libc::{c_char, c_double, size_t};
 use svg2polylines::{parse, CoordinatePair};
 
 /// Structure that contains a pointer to the coordinate pairs as well as the
@@ -37,6 +37,7 @@ pub struct Polyline {
 #[no_mangle]
 pub unsafe extern "C" fn svg_str_to_polylines(
     svg: *const c_char,
+    tol: c_double,
     polylines: *mut *mut Polyline,
     polylines_len: *mut size_t,
 ) -> u8 {
@@ -48,7 +49,7 @@ pub unsafe extern "C" fn svg_str_to_polylines(
     let r_str = c_str.to_str().unwrap();
 
     // Process
-    match parse(r_str) {
+    match parse(r_str, tol) {
         Ok(vec) => {
             // Convert `Vec<Vec<CoordinatePair>>` to `Vec<Polyline>`
             let mut tmp_vec: Vec<Polyline> = vec
