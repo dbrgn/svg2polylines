@@ -314,8 +314,13 @@ fn parse_path_segment(
                     // point 2 along the previous end point.
                     let dx = prev_x - prev_x2;
                     let dy = prev_y - prev_y2;
-                    let x1 = prev_x2 + 2.0 * dx;
-                    let y1 = prev_y2 + 2.0 * dy;
+                    let (x1, y1) = if abs {
+                        let current = current_line.last_pair()
+                            .ok_or("Invalid state: CurveTo or SmoothCurveTo on empty CurrentLine")?;
+                        (current.x + dx, current.y + dy)
+                    } else {
+                        (dx, dy)
+                    };
                     _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
                 },
                 Some(_) | None => {
@@ -611,6 +616,25 @@ mod tests {
         assert_eq!(result[1].len(), 2);
         assert_eq!(result[1][0], (30., 110.).into());
         assert_eq!(result[1][1], (40., 90.).into());
+    }
+
+    #[test]
+    fn test_smooth() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M 10 20 C 10 20 11 17 12 15 S 2 7 10 20 z" />
+                <path d="M 10 20 C 10 20 11 17 12 15 s -10 -8 -2 5 z" />
+                <path d="M 10 20 c 0 0 1 -3 2 -5 S 2 7 10 20 z" />
+                <path d="M 10 20 c 0 0 1 -3 2 -5 s -10 -8 -2 5 z" />
+            </svg>
+        "#;
+        let result = parse(&input).unwrap();
+        assert_eq!(result.len(), 4);
+        assert_eq!(result[0], result[1]);
+        assert_eq!(result[0], result[2]);
+        assert_eq!(result[0], result[3]);
     }
 
     #[test]
