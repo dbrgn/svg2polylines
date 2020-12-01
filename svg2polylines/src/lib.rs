@@ -18,6 +18,8 @@
 #![deny(clippy::all)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::single_match)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::must_use_candidate)]
 
 use std::convert;
 use std::mem;
@@ -78,12 +80,12 @@ impl CurrentLine {
         }
     }
 
-    /// Add a CoordinatePair to the internal polyline.
+    /// Add a `CoordinatePair` to the internal polyline.
     fn add_absolute(&mut self, pair: CoordinatePair) {
         self.line.push(pair);
     }
 
-    /// Add a relative CoordinatePair to the internal polyline.
+    /// Add a relative `CoordinatePair` to the internal polyline.
     fn add_relative(&mut self, pair: CoordinatePair) {
         if let Some(last) = self.line.last() {
             let cp = CoordinatePair::new(last.x + pair.x, last.y + pair.y);
@@ -95,7 +97,7 @@ impl CurrentLine {
         }
     }
 
-    /// Add a CoordinatePair to the internal polyline.
+    /// Add a `CoordinatePair` to the internal polyline.
     fn add(&mut self, abs: bool, pair: CoordinatePair) {
         if abs {
             self.add_absolute(pair);
@@ -104,7 +106,7 @@ impl CurrentLine {
         }
     }
 
-    /// A polyline is only valid if it has more than 1 CoordinatePair.
+    /// A polyline is only valid if it has more than 1 `CoordinatePair`.
     fn is_valid(&self) -> bool {
         self.line.len() > 1
     }
@@ -186,8 +188,8 @@ fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
                 trace!("parse_xml: EOF");
                 break;
             },
+            Ok(_) => {},
             Err(e) => return Err(format!("Error when parsing XML: {}", e)),
-            _ => {},
         }
 
         // If we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
