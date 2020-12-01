@@ -10,8 +10,6 @@
 //! **Note: Currently the path style is completely ignored. Only the path itself is
 //! returned.**
 //! 
-//! Minimal supported Rust version: 1.31 (Rust 2018).
-//! 
 //! FFI bindings for this crate can be found [on
 //! Github](https://github.com/dbrgn/svg2polylines).
 //! 
