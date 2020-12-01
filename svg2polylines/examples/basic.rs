@@ -3,7 +3,6 @@ use std::fs;
 use std::io::Read;
 use std::process::exit;
 
-use env_logger;
 use svg2polylines::{self, Polyline};
 
 fn main() {

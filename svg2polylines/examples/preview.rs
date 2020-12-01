@@ -6,7 +6,6 @@ use std::io::Read;
 use std::process::exit;
 
 use drag_controller::{DragController, Drag};
-use env_logger;
 use piston_window::{PistonWindow, WindowSettings, OpenGL, Transformed, clear, line};
 use piston_window::math::Matrix2d;
 use svg2polylines::{self, Polyline};
