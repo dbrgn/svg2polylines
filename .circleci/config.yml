@@ -78,6 +78,21 @@ jobs:
           key: v1-cargo-lint-cache
           paths:
             - /usr/local/cargo
+  rustfmt:
+    docker:
+      - image: rust:1.47
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-cargo-fmt-cache
+      - run: rustup component add rustfmt
+      - run: cd svg2polylines && cargo fmt -- --check
+      - run: cd svg2polylines-ffi && cargo fmt -- --check
+      - save_cache:
+          key: v1-cargo-fmt-cache
+          paths:
+            - /usr/local/cargo
 workflows:
   version: 2
 
@@ -87,6 +102,7 @@ workflows:
       - test
       - test-ffi
       - lint
+      - rustfmt
 
   # Build master every week on Monday at 03:00 am
   weekly:
@@ -101,3 +117,4 @@ workflows:
       - test
       - test-ffi
       - lint
+      - rustfmt
