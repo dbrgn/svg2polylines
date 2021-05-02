@@ -72,7 +72,8 @@ jobs:
           keys:
             - v1-cargo-lint-cache
       - run: rustup component add clippy
-      - run: cd svg2polylines && cargo clippy --all-targets --all-features -- -D warnings
+      - run: cd svg2polylines && cargo clippy --all-targets --all-features
+      - run: cd svg2polylines-ffi && cargo clippy --all-targets --all-features
       - save_cache:
           key: v1-cargo-lint-cache
           paths:
