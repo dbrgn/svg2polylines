@@ -12,11 +12,11 @@ fn main() {
     // Argument parsing
     let args: Vec<_> = env::args().collect();
     match args.len() {
-        2 => {},
+        2 => {}
         _ => {
             println!("Usage: {} <path/to/file.svg>", args[0]);
             exit(1);
-        },
+        }
     };
 
     // Load file

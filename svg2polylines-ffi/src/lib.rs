@@ -1,10 +1,10 @@
 #![crate_type = "dylib"]
 
-use std::mem;
 use std::ffi::CStr;
+use std::mem;
 
 use libc::{c_char, size_t};
-use svg2polylines::{CoordinatePair, parse};
+use svg2polylines::{parse, CoordinatePair};
 
 /// Structure that contains a pointer to the coordinate pairs as well as the
 /// number of coordinate pairs. It is only used for C interop.
@@ -35,12 +35,11 @@ pub struct Polyline {
 ///
 /// The `svg` pointer must point to a valid C-style 0-terminated string.
 #[no_mangle]
-pub unsafe extern fn svg_str_to_polylines(
+pub unsafe extern "C" fn svg_str_to_polylines(
     svg: *const c_char,
     polylines: *mut *mut Polyline,
     polylines_len: *mut size_t,
 ) -> u8 {
-
     // Convert C string to Rust string
     let c_str = {
         assert!(!svg.is_null());
@@ -52,15 +51,18 @@ pub unsafe extern fn svg_str_to_polylines(
     match parse(r_str) {
         Ok(vec) => {
             // Convert `Vec<Vec<CoordinatePair>>` to `Vec<Polyline>`
-            let mut tmp_vec: Vec<Polyline> = vec.into_iter().map(|mut v| {
-                v.shrink_to_fit();
-                let p = Polyline {
-                    ptr: v.as_mut_ptr(),
-                    len: v.len(),
-                };
-                mem::forget(v);
-                p
-            }).collect();
+            let mut tmp_vec: Vec<Polyline> = vec
+                .into_iter()
+                .map(|mut v| {
+                    v.shrink_to_fit();
+                    let p = Polyline {
+                        ptr: v.as_mut_ptr(),
+                        len: v.len(),
+                    };
+                    mem::forget(v);
+                    p
+                })
+                .collect();
             tmp_vec.shrink_to_fit();
             assert!(tmp_vec.len() == tmp_vec.capacity());
 
@@ -74,8 +76,8 @@ pub unsafe extern fn svg_str_to_polylines(
             mem::forget(tmp_vec);
 
             0
-        },
-        Err(_) => 1
+        }
+        Err(_) => 1,
     }
 }
 
@@ -86,7 +88,7 @@ pub unsafe extern fn svg_str_to_polylines(
 /// The user must be sure that the raw pointer is still valid and points to a
 /// polyline array previously allocated by `svg_str_to_polylines`.
 #[no_mangle]
-pub unsafe extern fn free_polylines(polylines: *mut Polyline, polylines_len: size_t) {
+pub unsafe extern "C" fn free_polylines(polylines: *mut Polyline, polylines_len: size_t) {
     for p in Vec::from_raw_parts(polylines, polylines_len as usize, polylines_len as usize) {
         Vec::from_raw_parts(p.ptr, p.len as usize, p.len as usize);
     }

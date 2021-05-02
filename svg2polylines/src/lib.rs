@@ -1,18 +1,18 @@
 //! Convert an SVG file to a list of polylines (aka polygonal chains or polygonal
 //! paths).
-//! 
+//!
 //! This can be used e.g. for simple drawing robot that just support drawing
 //! straight lines and liftoff / drop pen commands.
-//! 
+//!
 //! Flattening of Bézier curves is done using the
 //! [Lyon](https://github.com/nical/lyon) library.
 //!
 //! **Note: Currently the path style is completely ignored. Only the path itself is
 //! returned.**
-//! 
+//!
 //! FFI bindings for this crate can be found [on
 //! Github](https://github.com/dbrgn/svg2polylines).
-//! 
+//!
 //! You can optionally get serde 1 support by enabling the `serde` feature.
 
 #![deny(clippy::all)]
@@ -26,14 +26,14 @@ use std::mem;
 use std::str;
 
 use log::trace;
-use lyon_geom::{QuadraticBezierSegment, CubicBezierSegment};
 use lyon_geom::euclid::Point2D;
-use quick_xml::events::Event;
+use lyon_geom::{CubicBezierSegment, QuadraticBezierSegment};
 use quick_xml::events::attributes::Attribute;
+use quick_xml::events::Event;
 use svgtypes::{PathParser, PathSegment};
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 const FLATTENING_TOLERANCE: f64 = 0.15;
 
@@ -120,7 +120,7 @@ impl CurrentLine {
     fn last_x(&self) -> Option<f64> {
         self.line.last().map(|pair| pair.x)
     }
-    
+
     /// Return the last y coordinate (if the line is not empty).
     fn last_y(&self) -> Option<f64> {
         self.line.last().map(|pair| pair.y)
@@ -159,8 +159,7 @@ fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
     let mut buf = Vec::new();
     loop {
         match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref e)) |
-            Ok(Event::Empty(ref e)) => {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
                 trace!("parse_xml: Matched start of {:?}", e.name());
                 match e.name() {
                     b"path" => {
@@ -187,8 +186,8 @@ fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
             Ok(Event::Eof) => {
                 trace!("parse_xml: EOF");
                 break;
-            },
-            Ok(_) => {},
+            }
+            Ok(_) => {}
             Err(e) => return Err(format!("Error when parsing XML: {}", e)),
         }
 
@@ -207,14 +206,10 @@ fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
     // Process segments in path expression
     let mut prev_segment_store: Option<PathSegment> = None;
     for segment in PathParser::from(expr) {
-        let current_segment = segment.map_err(|e| format!("Could not parse path segment: {}", e))?;
+        let current_segment =
+            segment.map_err(|e| format!("Could not parse path segment: {}", e))?;
         let prev_segment = prev_segment_store.replace(current_segment);
-        parse_path_segment(
-            &current_segment,
-            prev_segment,
-            &mut line,
-            &mut lines,
-        )?;
+        parse_path_segment(&current_segment, prev_segment, &mut line, &mut lines)?;
     }
 
     // Path parsing is done, add previously parsing line if valid
@@ -237,7 +232,8 @@ fn _handle_cubic_curve(
     x: f64,
     y: f64,
 ) -> Result<(), String> {
-    let current = current_line.last_pair()
+    let current = current_line
+        .last_pair()
         .ok_or("Invalid state: CurveTo or SmoothCurveTo on empty CurrentLine")?;
     let curve = if abs {
         CubicBezierSegment {
@@ -275,31 +271,43 @@ fn parse_path_segment(
                 lines.push(current_line.finish());
             }
             current_line.add(abs, CoordinatePair::new(x, y));
-        },
+        }
         &PathSegment::LineTo { abs, x, y } => {
             trace!("parse_path_segment: LineTo");
             current_line.add(abs, CoordinatePair::new(x, y));
-        },
+        }
         &PathSegment::HorizontalLineTo { abs, x } => {
             trace!("parse_path_segment: HorizontalLineTo");
             match (current_line.last_y(), abs) {
                 (Some(y), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
                 (Some(_), false) => current_line.add_relative(CoordinatePair::new(x, 0.0)),
-                (None, _) => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
+                (None, _) => {
+                    return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into())
+                }
             }
-        },
+        }
         &PathSegment::VerticalLineTo { abs, y } => {
             trace!("parse_path_segment: VerticalLineTo");
             match (current_line.last_x(), abs) {
                 (Some(x), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
                 (Some(_), false) => current_line.add_relative(CoordinatePair::new(0.0, y)),
-                (None, _) => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
+                (None, _) => {
+                    return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into())
+                }
             }
-        },
-        &PathSegment::CurveTo { abs, x1, y1, x2, y2, x, y } => {
+        }
+        &PathSegment::CurveTo {
+            abs,
+            x1,
+            y1,
+            x2,
+            y2,
+            x,
+            y,
+        } => {
             trace!("parse_path_segment: CurveTo");
             _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
-        },
+        }
         &PathSegment::SmoothCurveTo { abs, x2, y2, x, y } => {
             trace!("parse_path_segment: SmoothCurveTo");
 
@@ -308,21 +316,34 @@ fn parse_path_segment(
             // implementations much more complex, while the data is perfectly
             // equivalent to a fully written-out cubic curve m(
             match prev_segment {
-                Some(PathSegment::CurveTo { x2: prev_x2, y2: prev_y2, x: prev_x, y: prev_y, .. }) |
-                Some(PathSegment::SmoothCurveTo { x2: prev_x2, y2: prev_y2, x: prev_x, y: prev_y, .. }) => {
+                Some(PathSegment::CurveTo {
+                    x2: prev_x2,
+                    y2: prev_y2,
+                    x: prev_x,
+                    y: prev_y,
+                    ..
+                })
+                | Some(PathSegment::SmoothCurveTo {
+                    x2: prev_x2,
+                    y2: prev_y2,
+                    x: prev_x,
+                    y: prev_y,
+                    ..
+                }) => {
                     // We have a previous curve. Mirror the previous control
                     // point 2 along the previous end point.
                     let dx = prev_x - prev_x2;
                     let dy = prev_y - prev_y2;
                     let (x1, y1) = if abs {
-                        let current = current_line.last_pair()
-                            .ok_or("Invalid state: CurveTo or SmoothCurveTo on empty CurrentLine")?;
+                        let current = current_line.last_pair().ok_or(
+                            "Invalid state: CurveTo or SmoothCurveTo on empty CurrentLine",
+                        )?;
                         (current.x + dx, current.y + dy)
                     } else {
                         (dx, dy)
                     };
                     _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
-                },
+                }
                 Some(_) | None => {
                     // The previous segment was not a curve. Use the current
                     // point as reference.
@@ -331,15 +352,20 @@ fn parse_path_segment(
                             let x1 = pair.x;
                             let y1 = pair.y;
                             _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
-                        },
-                        None => return Err("Invalid state: SmoothCurveTo without a reference point".into()),
+                        }
+                        None => {
+                            return Err(
+                                "Invalid state: SmoothCurveTo without a reference point".into()
+                            )
+                        }
                     }
-                },
+                }
             }
-        },
+        }
         &PathSegment::Quadratic { abs, x1, y1, x, y } => {
             trace!("parse_path_segment: Quadratic");
-            let current = current_line.last_pair()
+            let current = current_line
+                .last_pair()
                 .ok_or("Invalid state: Quadratic on empty CurrentLine")?;
             let curve = if abs {
                 QuadraticBezierSegment {
@@ -357,18 +383,19 @@ fn parse_path_segment(
             for point in curve.flattened(FLATTENING_TOLERANCE) {
                 current_line.add_absolute(CoordinatePair::new(point.x, point.y));
             }
-        },
+        }
         &PathSegment::ClosePath { .. } => {
             trace!("parse_path_segment: ClosePath");
-            current_line.close().map_err(|e| format!("Invalid state: {}", e))?;
-        },
+            current_line
+                .close()
+                .map_err(|e| format!("Invalid state: {}", e))?;
+        }
         other => {
             return Err(format!("Unsupported path segment: {:?}", other));
         }
     }
     Ok(())
 }
-
 
 /// Parse an SVG string into a vector of polylines.
 pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
@@ -419,9 +446,15 @@ mod tests {
     #[test]
     fn test_current_line_close() {
         let mut line = CurrentLine::new();
-        assert_eq!(line.close(), Err("Lines with less than 2 coordinate pairs cannot be closed.".into()));
+        assert_eq!(
+            line.close(),
+            Err("Lines with less than 2 coordinate pairs cannot be closed.".into())
+        );
         line.add_absolute((1.0, 2.0).into());
-        assert_eq!(line.close(), Err("Lines with less than 2 coordinate pairs cannot be closed.".into()));
+        assert_eq!(
+            line.close(),
+            Err("Lines with less than 2 coordinate pairs cannot be closed.".into())
+        );
         line.add_absolute((2.0, 3.0).into());
         assert_eq!(line.close(), Ok(()));
         let finished = line.finish();
@@ -435,21 +468,39 @@ mod tests {
     fn test_parse_segment_data() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_segment(&PathSegment::MoveTo {
-            abs: true,
-            x: 1.0,
-            y: 2.0,
-        }, None, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::LineTo {
-            abs: true,
-            x: 2.0,
-            y: 3.0,
-        }, None, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::LineTo {
-            abs: true,
-            x: 3.0,
-            y: 2.0,
-        }, None, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(
+            &PathSegment::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 2.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        parse_path_segment(
+            &PathSegment::LineTo {
+                abs: true,
+                x: 2.0,
+                y: 3.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        parse_path_segment(
+            &PathSegment::LineTo {
+                abs: true,
+                x: 3.0,
+                y: 2.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
@@ -464,19 +515,31 @@ mod tests {
     fn test_parse_segment_data_horizontal_vertical() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_segment(&PathSegment::MoveTo {
-            abs: true,
-            x: 1.0,
-            y: 2.0,
-        }, None, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::HorizontalLineTo {
-            abs: true,
-            x: 3.0,
-        }, None, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::VerticalLineTo {
-            abs: true,
-            y: -1.0,
-        }, None, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(
+            &PathSegment::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 2.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        parse_path_segment(
+            &PathSegment::HorizontalLineTo { abs: true, x: 3.0 },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        parse_path_segment(
+            &PathSegment::VerticalLineTo { abs: true, y: -1.0 },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
@@ -490,16 +553,27 @@ mod tests {
     fn test_parse_segment_data_unsupported() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_segment(&PathSegment::MoveTo {
-            abs: true,
-            x: 1.0,
-            y: 2.0,
-        }, None, &mut current_line, &mut lines).unwrap();
-        let result = parse_path_segment(&PathSegment::SmoothQuadratic {
-            abs: true,
-            x: 3.0,
-            y: 4.0,
-        }, None, &mut current_line, &mut lines);
+        parse_path_segment(
+            &PathSegment::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 2.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        let result = parse_path_segment(
+            &PathSegment::SmoothQuadratic {
+                abs: true,
+                x: 3.0,
+                y: 4.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        );
         assert!(result.is_err());
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
@@ -512,13 +586,83 @@ mod tests {
     fn test_parse_segment_data_multiple() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 2.0, }, None, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 3.0, }, None, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 3.0, }, None, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 4.0, }, None, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 4.0, }, None, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::LineTo { abs: true, x: 2.0, y: 5.0, }, None, &mut current_line, &mut lines).unwrap();
-        parse_path_segment(&PathSegment::MoveTo { abs: true, x: 1.0, y: 5.0, }, None, &mut current_line, &mut lines).unwrap();
+        parse_path_segment(
+            &PathSegment::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 2.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        parse_path_segment(
+            &PathSegment::LineTo {
+                abs: true,
+                x: 2.0,
+                y: 3.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        parse_path_segment(
+            &PathSegment::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 3.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        parse_path_segment(
+            &PathSegment::LineTo {
+                abs: true,
+                x: 2.0,
+                y: 4.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        parse_path_segment(
+            &PathSegment::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 4.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        parse_path_segment(
+            &PathSegment::LineTo {
+                abs: true,
+                x: 2.0,
+                y: 5.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
+        parse_path_segment(
+            &PathSegment::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 5.0,
+            },
+            None,
+            &mut current_line,
+            &mut lines,
+        )
+        .unwrap();
         assert_eq!(lines.len(), 3);
         assert_eq!(current_line.is_valid(), false);
         let finished = current_line.finish();
@@ -561,7 +705,7 @@ mod tests {
         assert_eq!(result[0][3], (10., 10.).into());
     }
 
-    #[cfg(feature="use_serde")]
+    #[cfg(feature = "use_serde")]
     #[test]
     fn test_serde() {
         let cp = CoordinatePair::new(10.0, 20.0);
@@ -647,7 +791,10 @@ mod tests {
             </svg>
         "#;
         let result = parse_xml(&input).unwrap();
-        assert_eq!(result, vec!["M 10,100 40,70 h 10 m -20,40 10,-20".to_string()]);
+        assert_eq!(
+            result,
+            vec!["M 10,100 40,70 h 10 m -20,40 10,-20".to_string()]
+        );
     }
 
     #[test]
@@ -661,10 +808,13 @@ mod tests {
             </svg>
         "#;
         let result = parse_xml(&input).unwrap();
-        assert_eq!(result, vec![
-            "M 10,100 40,70 h 10 m -20,40 10,-20".to_string(),
-            "M 20,30".to_string(),
-        ]);
+        assert_eq!(
+            result,
+            vec![
+                "M 10,100 40,70 h 10 m -20,40 10,-20".to_string(),
+                "M 20,30".to_string(),
+            ]
+        );
     }
 
     /// If multiple "d" attributes are found, simply use the first one.
@@ -711,19 +861,22 @@ mod tests {
         let result = parse(&input).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 11);
-        assert_eq!(result[0], vec![
-            CoordinatePair { x: 0.10650371, y: 93.221877 },
-            CoordinatePair { x: 0.10650371, y: 93.221877 },
-            CoordinatePair { x: 1.0590999115751005, y: 92.1819684952793 },
-            CoordinatePair { x: 5.370943458862083, y: 89.70221166323438 },
-            CoordinatePair { x: 8.823669349110439, y: 89.5489159835669 },
-            CoordinatePair { x: 9.72849, y: 89.74737800000001 },
-            CoordinatePair { x: 12.282201899791776, y: 90.98899075432975 },
-            CoordinatePair { x: 13.679358042116176, y: 92.76458821557513 },
-            CoordinatePair { x: 14.196220298368665, y: 94.94365381717776 },
-            CoordinatePair { x: 14.023847964560911, y: 96.8907337998339 },
-            CoordinatePair { x: 14.004928, y: 96.96365600000001 },
-        ]);
+        assert_eq!(
+            result[0],
+            vec![
+                CoordinatePair::new(0.10650371, 93.221877),
+                CoordinatePair::new(0.10650371, 93.221877),
+                CoordinatePair::new(1.0590999115751005, 92.1819684952793),
+                CoordinatePair::new(5.370943458862083, 89.70221166323438),
+                CoordinatePair::new(8.823669349110439, 89.5489159835669),
+                CoordinatePair::new(9.72849, 89.74737800000001),
+                CoordinatePair::new(12.282201899791776, 90.98899075432975),
+                CoordinatePair::new(13.679358042116176, 92.76458821557513),
+                CoordinatePair::new(14.196220298368665, 94.94365381717776),
+                CoordinatePair::new(14.023847964560911, 96.8907337998339),
+                CoordinatePair::new(14.004928, 96.96365600000001),
+            ]
+        );
     }
 
     /// Test the flattening of a mirrored cubic curve (also called "smooth
@@ -742,38 +895,41 @@ mod tests {
         let result = parse(&input).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 31);
-        assert_eq!(result[0], vec![
-            CoordinatePair { x: 10.0, y: 80.0 },
-            CoordinatePair { x: 18.274009596865902, y: 62.23607902107565 },
-            CoordinatePair { x: 25.54854286110641, y: 49.356797920419545 },
-            CoordinatePair { x: 32.00061859514943, y: 40.276471430451714 },
-            CoordinatePair { x: 37.76877706571886, y: 34.14452804422132 },
-            CoordinatePair { x: 42.977786748045155, y: 30.28862586112818 },
-            CoordinatePair { x: 47.75948795454129, y: 28.192810777806955 },
-            CoordinatePair { x: 52.26776775705932, y: 27.50166400871596 },
-            CoordinatePair { x: 56.67911619890174, y: 28.03853054445934 },
-            CoordinatePair { x: 61.17477190430957, y: 29.815620388680145 },
-            CoordinatePair { x: 65.91841423291706, y: 33.02014722137494 },
-            CoordinatePair { x: 71.04736316596855, y: 37.986586554742004 },
-            CoordinatePair { x: 76.67889180557972, y: 45.17533085552483 },
-            CoordinatePair { x: 82.92363487320814, y: 55.16763405833094 },
-            CoordinatePair { x: 89.90077281862139, y: 68.67838317092607 },
-            CoordinatePair { x: 95.0, y: 80.0 },
-            CoordinatePair { x: 103.2740095968659, y: 97.76392097892435 },
-            CoordinatePair { x: 110.5485428611064, y: 110.64320207958045 },
-            CoordinatePair { x: 117.00061859514942, y: 119.72352856954828 },
-            CoordinatePair { x: 122.76877706571884, y: 125.85547195577867 },
-            CoordinatePair { x: 127.97778674804515, y: 129.7113741388718 },
-            CoordinatePair { x: 132.7594879545413, y: 131.80718922219302 },
-            CoordinatePair { x: 137.26776775705935, y: 132.49833599128402 },
-            CoordinatePair { x: 141.67911619890177, y: 131.96146945554065 },
-            CoordinatePair { x: 146.17477190430958, y: 130.18437961131986 },
-            CoordinatePair { x: 150.91841423291706, y: 126.97985277862506 },
-            CoordinatePair { x: 156.04736316596853, y: 122.01341344525798 },
-            CoordinatePair { x: 161.67889180557972, y: 114.82466914447512 },
-            CoordinatePair { x: 167.92363487320813, y: 104.83236594166902 },
-            CoordinatePair { x: 174.90077281862128, y: 91.32161682907416 },
-            CoordinatePair { x: 180.0, y: 80.0 },
-        ]);
+        assert_eq!(
+            result[0],
+            vec![
+                CoordinatePair::new(10.0, 80.0),
+                CoordinatePair::new(18.274009596865902, 62.23607902107565),
+                CoordinatePair::new(25.54854286110641, 49.356797920419545),
+                CoordinatePair::new(32.00061859514943, 40.276471430451714),
+                CoordinatePair::new(37.76877706571886, 34.14452804422132),
+                CoordinatePair::new(42.977786748045155, 30.28862586112818),
+                CoordinatePair::new(47.75948795454129, 28.192810777806955),
+                CoordinatePair::new(52.26776775705932, 27.50166400871596),
+                CoordinatePair::new(56.67911619890174, 28.03853054445934),
+                CoordinatePair::new(61.17477190430957, 29.815620388680145),
+                CoordinatePair::new(65.91841423291706, 33.02014722137494),
+                CoordinatePair::new(71.04736316596855, 37.986586554742004),
+                CoordinatePair::new(76.67889180557972, 45.17533085552483),
+                CoordinatePair::new(82.92363487320814, 55.16763405833094),
+                CoordinatePair::new(89.90077281862139, 68.67838317092607),
+                CoordinatePair::new(95.0, 80.0),
+                CoordinatePair::new(103.2740095968659, 97.76392097892435),
+                CoordinatePair::new(110.5485428611064, 110.64320207958045),
+                CoordinatePair::new(117.00061859514942, 119.72352856954828),
+                CoordinatePair::new(122.76877706571884, 125.85547195577867),
+                CoordinatePair::new(127.97778674804515, 129.7113741388718),
+                CoordinatePair::new(132.7594879545413, 131.80718922219302),
+                CoordinatePair::new(137.26776775705935, 132.49833599128402),
+                CoordinatePair::new(141.67911619890177, 131.96146945554065),
+                CoordinatePair::new(146.17477190430958, 130.18437961131986),
+                CoordinatePair::new(150.91841423291706, 126.97985277862506),
+                CoordinatePair::new(156.04736316596853, 122.01341344525798),
+                CoordinatePair::new(161.67889180557972, 114.82466914447512),
+                CoordinatePair::new(167.92363487320813, 104.83236594166902),
+                CoordinatePair::new(174.90077281862128, 91.32161682907416),
+                CoordinatePair::new(180.0, 80.0),
+            ]
+        );
     }
 }
