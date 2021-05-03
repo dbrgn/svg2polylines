@@ -10,6 +10,8 @@
 //! **Note: Currently the path style is completely ignored. Only the path itself is
 //! returned.**
 //!
+//! Minimal supported Rust version: 1.31 (Rust 2018).
+//!
 //! FFI bindings for this crate can be found [on
 //! Github](https://github.com/dbrgn/svg2polylines).
 //!
@@ -34,8 +36,6 @@ use svgtypes::{PathParser, PathSegment};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-
-const FLATTENING_TOLERANCE: f64 = 0.15;
 
 /// A `CoordinatePair` consists of an x and y coordinate.
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -198,7 +198,7 @@ fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
     Ok(paths)
 }
 
-fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
+fn parse_path(expr: &str, tol: f64) -> Result<Vec<Polyline>, String> {
     trace!("parse_path");
     let mut lines = Vec::new();
     let mut line = CurrentLine::new();
@@ -209,7 +209,7 @@ fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
         let current_segment =
             segment.map_err(|e| format!("Could not parse path segment: {}", e))?;
         let prev_segment = prev_segment_store.replace(current_segment);
-        parse_path_segment(&current_segment, prev_segment, &mut line, &mut lines)?;
+        parse_path_segment(&current_segment, prev_segment, &mut line, tol, &mut lines)?;
     }
 
     // Path parsing is done, add previously parsing line if valid
@@ -224,6 +224,7 @@ fn parse_path(expr: &str) -> Result<Vec<Polyline>, String> {
 #[allow(clippy::too_many_arguments)]
 fn _handle_cubic_curve(
     current_line: &mut CurrentLine,
+    tol: f64,
     abs: bool,
     x1: f64,
     y1: f64,
@@ -250,7 +251,7 @@ fn _handle_cubic_curve(
             to: Point2D::new(current.x + x, current.y + y),
         }
     };
-    for point in curve.flattened(FLATTENING_TOLERANCE) {
+    for point in curve.flattened(tol) {
         current_line.add_absolute(CoordinatePair::new(point.x, point.y));
     }
     Ok(())
@@ -261,6 +262,7 @@ fn parse_path_segment(
     segment: &PathSegment,
     prev_segment: Option<PathSegment>,
     current_line: &mut CurrentLine,
+    tol: f64,
     lines: &mut Vec<Polyline>,
 ) -> Result<(), String> {
     trace!("parse_path_segment");
@@ -306,7 +308,7 @@ fn parse_path_segment(
             y,
         } => {
             trace!("parse_path_segment: CurveTo");
-            _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
+            _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
         }
         &PathSegment::SmoothCurveTo { abs, x2, y2, x, y } => {
             trace!("parse_path_segment: SmoothCurveTo");
@@ -342,7 +344,7 @@ fn parse_path_segment(
                     } else {
                         (dx, dy)
                     };
-                    _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
+                    _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
                 }
                 Some(_) | None => {
                     // The previous segment was not a curve. Use the current
@@ -351,7 +353,7 @@ fn parse_path_segment(
                         Some(pair) => {
                             let x1 = pair.x;
                             let y1 = pair.y;
-                            _handle_cubic_curve(current_line, abs, x1, y1, x2, y2, x, y)?;
+                            _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
                         }
                         None => {
                             return Err(
@@ -380,7 +382,7 @@ fn parse_path_segment(
                     to: Point2D::new(current.x + x, current.y + y),
                 }
             };
-            for point in curve.flattened(FLATTENING_TOLERANCE) {
+            for point in curve.flattened(tol) {
                 current_line.add_absolute(CoordinatePair::new(point.x, point.y));
             }
         }
@@ -398,7 +400,7 @@ fn parse_path_segment(
 }
 
 /// Parse an SVG string into a vector of polylines.
-pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
+pub fn parse(svg: &str, tol: f64) -> Result<Vec<Polyline>, String> {
     trace!("parse");
 
     // Parse the XML string into a list of path expressions
@@ -410,7 +412,7 @@ pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
 
     // Process path expressions
     for expr in path_exprs {
-        polylines.extend(parse_path(&expr)?);
+        polylines.extend(parse_path(&expr, tol)?);
     }
 
     trace!("parse: This results in {} polylines", polylines.len());
@@ -421,6 +423,8 @@ pub fn parse(svg: &str) -> Result<Vec<Polyline>, String> {
 #[allow(clippy::unreadable_literal)]
 mod tests {
     use super::*;
+
+    const FLATTENING_TOLERANCE: f64 = 0.15;
 
     #[test]
     fn test_current_line() {
@@ -476,6 +480,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -487,6 +492,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -498,6 +504,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -523,6 +530,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -530,6 +538,7 @@ mod tests {
             &PathSegment::HorizontalLineTo { abs: true, x: 3.0 },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -537,6 +546,7 @@ mod tests {
             &PathSegment::VerticalLineTo { abs: true, y: -1.0 },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -561,6 +571,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -572,6 +583,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         );
         assert!(result.is_err());
@@ -594,6 +606,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -605,6 +618,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -616,6 +630,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -627,6 +642,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -638,6 +654,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -649,6 +666,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -660,6 +678,7 @@ mod tests {
             },
             None,
             &mut current_line,
+            FLATTENING_TOLERANCE,
             &mut lines,
         )
         .unwrap();
@@ -678,7 +697,7 @@ mod tests {
                 <path d="M 113,35 H 40 L -39,49 H 40" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 4);
         assert_eq!(result[0][0], (113., 35.).into());
@@ -696,7 +715,7 @@ mod tests {
                 <path d="M 10,10 20,15 10,20 Z" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 4);
         assert_eq!(result[0][0], (10., 10.).into());
@@ -722,7 +741,7 @@ mod tests {
                 <path d="M 10,10 20,15 10,20 Z m 0,40 H 0" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 2);
 
         assert_eq!(result[0].len(), 4);
@@ -745,7 +764,7 @@ mod tests {
                 <path d="M 10,100 40,70 h 10 m -20,40 10,-20" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
 
         // 2 Polylines
         assert_eq!(result.len(), 2);
@@ -774,7 +793,7 @@ mod tests {
                 <path d="M 10 20 c 0 0 1 -3 2 -5 s -10 -8 -2 5 z" />
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 4);
         assert_eq!(result[0], result[1]);
         assert_eq!(result[0], result[2]);
@@ -858,23 +877,56 @@ mod tests {
                 <path d="m 0.10650371,93.221877 c 0,0 3.74188519,-5.078118 9.62198629,-3.474499 5.880103,1.60362 4.276438,7.216278 4.276438,7.216278"/>
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 11);
         assert_eq!(
             result[0],
             vec![
-                CoordinatePair::new(0.10650371, 93.221877),
-                CoordinatePair::new(0.10650371, 93.221877),
-                CoordinatePair::new(1.0590999115751005, 92.1819684952793),
-                CoordinatePair::new(5.370943458862083, 89.70221166323438),
-                CoordinatePair::new(8.823669349110439, 89.5489159835669),
-                CoordinatePair::new(9.72849, 89.74737800000001),
-                CoordinatePair::new(12.282201899791776, 90.98899075432975),
-                CoordinatePair::new(13.679358042116176, 92.76458821557513),
-                CoordinatePair::new(14.196220298368665, 94.94365381717776),
-                CoordinatePair::new(14.023847964560911, 96.8907337998339),
-                CoordinatePair::new(14.004928, 96.96365600000001),
+                CoordinatePair {
+                    x: 0.10650371,
+                    y: 93.221877
+                },
+                CoordinatePair {
+                    x: 0.10650371,
+                    y: 93.221877
+                },
+                CoordinatePair {
+                    x: 1.0590999115751005,
+                    y: 92.1819684952793
+                },
+                CoordinatePair {
+                    x: 5.370943458862083,
+                    y: 89.70221166323438
+                },
+                CoordinatePair {
+                    x: 8.823669349110439,
+                    y: 89.5489159835669
+                },
+                CoordinatePair {
+                    x: 9.72849,
+                    y: 89.74737800000001
+                },
+                CoordinatePair {
+                    x: 12.282201899791776,
+                    y: 90.98899075432975
+                },
+                CoordinatePair {
+                    x: 13.679358042116176,
+                    y: 92.76458821557513
+                },
+                CoordinatePair {
+                    x: 14.196220298368665,
+                    y: 94.94365381717776
+                },
+                CoordinatePair {
+                    x: 14.023847964560911,
+                    y: 96.8907337998339
+                },
+                CoordinatePair {
+                    x: 14.004928,
+                    y: 96.96365600000001
+                },
             ]
         );
     }
@@ -892,43 +944,127 @@ mod tests {
                 <path d="M10 80 C 40 10, 65 10, 95 80 S 150 150, 180 80"/>
             </svg>
         "#;
-        let result = parse(&input).unwrap();
+        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 31);
         assert_eq!(
             result[0],
             vec![
-                CoordinatePair::new(10.0, 80.0),
-                CoordinatePair::new(18.274009596865902, 62.23607902107565),
-                CoordinatePair::new(25.54854286110641, 49.356797920419545),
-                CoordinatePair::new(32.00061859514943, 40.276471430451714),
-                CoordinatePair::new(37.76877706571886, 34.14452804422132),
-                CoordinatePair::new(42.977786748045155, 30.28862586112818),
-                CoordinatePair::new(47.75948795454129, 28.192810777806955),
-                CoordinatePair::new(52.26776775705932, 27.50166400871596),
-                CoordinatePair::new(56.67911619890174, 28.03853054445934),
-                CoordinatePair::new(61.17477190430957, 29.815620388680145),
-                CoordinatePair::new(65.91841423291706, 33.02014722137494),
-                CoordinatePair::new(71.04736316596855, 37.986586554742004),
-                CoordinatePair::new(76.67889180557972, 45.17533085552483),
-                CoordinatePair::new(82.92363487320814, 55.16763405833094),
-                CoordinatePair::new(89.90077281862139, 68.67838317092607),
-                CoordinatePair::new(95.0, 80.0),
-                CoordinatePair::new(103.2740095968659, 97.76392097892435),
-                CoordinatePair::new(110.5485428611064, 110.64320207958045),
-                CoordinatePair::new(117.00061859514942, 119.72352856954828),
-                CoordinatePair::new(122.76877706571884, 125.85547195577867),
-                CoordinatePair::new(127.97778674804515, 129.7113741388718),
-                CoordinatePair::new(132.7594879545413, 131.80718922219302),
-                CoordinatePair::new(137.26776775705935, 132.49833599128402),
-                CoordinatePair::new(141.67911619890177, 131.96146945554065),
-                CoordinatePair::new(146.17477190430958, 130.18437961131986),
-                CoordinatePair::new(150.91841423291706, 126.97985277862506),
-                CoordinatePair::new(156.04736316596853, 122.01341344525798),
-                CoordinatePair::new(161.67889180557972, 114.82466914447512),
-                CoordinatePair::new(167.92363487320813, 104.83236594166902),
-                CoordinatePair::new(174.90077281862128, 91.32161682907416),
-                CoordinatePair::new(180.0, 80.0),
+                CoordinatePair { x: 10.0, y: 80.0 },
+                CoordinatePair {
+                    x: 18.274009596865902,
+                    y: 62.23607902107565
+                },
+                CoordinatePair {
+                    x: 25.54854286110641,
+                    y: 49.356797920419545
+                },
+                CoordinatePair {
+                    x: 32.00061859514943,
+                    y: 40.276471430451714
+                },
+                CoordinatePair {
+                    x: 37.76877706571886,
+                    y: 34.14452804422132
+                },
+                CoordinatePair {
+                    x: 42.977786748045155,
+                    y: 30.28862586112818
+                },
+                CoordinatePair {
+                    x: 47.75948795454129,
+                    y: 28.192810777806955
+                },
+                CoordinatePair {
+                    x: 52.26776775705932,
+                    y: 27.50166400871596
+                },
+                CoordinatePair {
+                    x: 56.67911619890174,
+                    y: 28.03853054445934
+                },
+                CoordinatePair {
+                    x: 61.17477190430957,
+                    y: 29.815620388680145
+                },
+                CoordinatePair {
+                    x: 65.91841423291706,
+                    y: 33.02014722137494
+                },
+                CoordinatePair {
+                    x: 71.04736316596855,
+                    y: 37.986586554742004
+                },
+                CoordinatePair {
+                    x: 76.67889180557972,
+                    y: 45.17533085552483
+                },
+                CoordinatePair {
+                    x: 82.92363487320814,
+                    y: 55.16763405833094
+                },
+                CoordinatePair {
+                    x: 89.90077281862139,
+                    y: 68.67838317092607
+                },
+                CoordinatePair { x: 95.0, y: 80.0 },
+                CoordinatePair {
+                    x: 103.2740095968659,
+                    y: 97.76392097892435
+                },
+                CoordinatePair {
+                    x: 110.5485428611064,
+                    y: 110.64320207958045
+                },
+                CoordinatePair {
+                    x: 117.00061859514942,
+                    y: 119.72352856954828
+                },
+                CoordinatePair {
+                    x: 122.76877706571884,
+                    y: 125.85547195577867
+                },
+                CoordinatePair {
+                    x: 127.97778674804515,
+                    y: 129.7113741388718
+                },
+                CoordinatePair {
+                    x: 132.7594879545413,
+                    y: 131.80718922219302
+                },
+                CoordinatePair {
+                    x: 137.26776775705935,
+                    y: 132.49833599128402
+                },
+                CoordinatePair {
+                    x: 141.67911619890177,
+                    y: 131.96146945554065
+                },
+                CoordinatePair {
+                    x: 146.17477190430958,
+                    y: 130.18437961131986
+                },
+                CoordinatePair {
+                    x: 150.91841423291706,
+                    y: 126.97985277862506
+                },
+                CoordinatePair {
+                    x: 156.04736316596853,
+                    y: 122.01341344525798
+                },
+                CoordinatePair {
+                    x: 161.67889180557972,
+                    y: 114.82466914447512
+                },
+                CoordinatePair {
+                    x: 167.92363487320813,
+                    y: 104.83236594166902
+                },
+                CoordinatePair {
+                    x: 174.90077281862128,
+                    y: 91.32161682907416
+                },
+                CoordinatePair { x: 180.0, y: 80.0 },
             ]
         );
     }

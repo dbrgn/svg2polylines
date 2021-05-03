@@ -25,7 +25,7 @@ typedef struct Polyline {
     size_t len;
 } Polyline;
 
-uint8_t svg_str_to_polylines(char* svg, Polyline** polylines, size_t* polylines_len);
+uint8_t svg_str_to_polylines(char* svg, double tol, Polyline** polylines, size_t* polylines_len);
 void free_polylines(Polyline* polylines, size_t polylines_len);
 
 
@@ -53,7 +53,7 @@ int main() {
     size_t polylines_len = 0;
 
     // Process data
-    uint8_t err = svg_str_to_polylines(input, &polylines, &polylines_len);
+    uint8_t err = svg_str_to_polylines(input, 0.15, &polylines, &polylines_len);
 
     // Error handling
     if (err > 0) {
