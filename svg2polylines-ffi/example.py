@@ -14,7 +14,7 @@ typedef struct Polyline {
     size_t len;
 } Polyline;
 
-uint8_t svg_str_to_polylines(char* svg, Polyline** polylines, size_t* polylines_len);
+uint8_t svg_str_to_polylines(char* svg, double tol, Polyline** polylines, size_t* polylines_len);
 void free_polylines(Polyline* polylines, size_t polylines_len);
 ''')
 
@@ -47,7 +47,7 @@ def print_polyline(p):
 
 polylines = ffi.new('Polyline**')
 polylines_len = ffi.new('size_t*')
-lib.svg_str_to_polylines(svg_input, polylines, polylines_len)
+lib.svg_str_to_polylines(svg_input, 0.15, polylines, polylines_len)
 
 
 print('Found %d polylines!' % polylines_len[0])
