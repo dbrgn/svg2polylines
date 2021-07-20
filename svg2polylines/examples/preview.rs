@@ -7,7 +7,7 @@ use std::process::exit;
 
 use drag_controller::{Drag, DragController};
 use piston_window::math::Matrix2d;
-use piston_window::{clear, line, OpenGL, PistonWindow, Transformed, WindowSettings};
+use piston_window::{clear, line, PistonWindow, Transformed, WindowSettings};
 use svg2polylines::{self, Polyline};
 
 fn main() {
@@ -34,15 +34,17 @@ fn main() {
         println!("Error: {}", e);
         exit(2);
     });
+    if polylines.is_empty() {
+        println!("Error: No polylines found in input file.");
+        exit(2);
+    }
 
     // Create window
-    let opengl = OpenGL::V3_2;
     let scale = 2;
     let fscale = 2.0;
     let window_size = [716 * scale, 214 * scale];
     let mut window: PistonWindow = WindowSettings::new("Preview (press ESC to exit)", window_size)
         .exit_on_esc(true)
-        .opengl(opengl)
         .build()
         .unwrap();
 
@@ -75,7 +77,7 @@ fn main() {
                 Drag::Interrupt => true,
             }
         });
-        window.draw_2d(&e, |c, g| {
+        window.draw_2d(&e, |ctx, g, _device| {
             clear([1.0; 4], g);
             for polyline in &polylines {
                 for pair in polyline.windows(2) {
@@ -83,7 +85,7 @@ fn main() {
                         black,
                         radius,
                         [pair[0].x, pair[0].y, pair[1].x, pair[1].y],
-                        c.transform
+                        ctx.transform
                             .append_transform(translate_tmp)
                             .scale(fscale, fscale),
                         g,
