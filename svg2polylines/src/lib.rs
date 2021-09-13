@@ -24,15 +24,11 @@
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::too_many_lines)]
 
-use std::convert;
-use std::mem;
-use std::str;
+use std::{convert, mem, str};
 
 use log::trace;
-use lyon_geom::euclid::Point2D;
-use lyon_geom::{CubicBezierSegment, QuadraticBezierSegment};
-use quick_xml::events::attributes::Attribute;
-use quick_xml::events::Event;
+use lyon_geom::{euclid::Point2D, CubicBezierSegment, QuadraticBezierSegment};
+use quick_xml::{events::attributes::Attribute, events::Event};
 use svgtypes::{PathParser, PathSegment};
 
 #[cfg(feature = "serde")]
@@ -884,50 +880,17 @@ mod tests {
         assert_eq!(
             result[0],
             vec![
-                CoordinatePair {
-                    x: 0.10650371,
-                    y: 93.221877
-                },
-                CoordinatePair {
-                    x: 0.10650371,
-                    y: 93.221877
-                },
-                CoordinatePair {
-                    x: 1.0590999115751005,
-                    y: 92.1819684952793
-                },
-                CoordinatePair {
-                    x: 5.370943458862083,
-                    y: 89.70221166323438
-                },
-                CoordinatePair {
-                    x: 8.823669349110439,
-                    y: 89.5489159835669
-                },
-                CoordinatePair {
-                    x: 9.72849,
-                    y: 89.74737800000001
-                },
-                CoordinatePair {
-                    x: 12.282201899791776,
-                    y: 90.98899075432975
-                },
-                CoordinatePair {
-                    x: 13.679358042116176,
-                    y: 92.76458821557513
-                },
-                CoordinatePair {
-                    x: 14.196220298368665,
-                    y: 94.94365381717776
-                },
-                CoordinatePair {
-                    x: 14.023847964560911,
-                    y: 96.8907337998339
-                },
-                CoordinatePair {
-                    x: 14.004928,
-                    y: 96.96365600000001
-                },
+                CoordinatePair::new(0.10650371, 93.221877),
+                CoordinatePair::new(1.294403614814815, 91.96472118518521),
+                CoordinatePair::new(2.6361703106158485, 90.93256152046511),
+                CoordinatePair::new(4.620522695185185, 89.9354544814815),
+                CoordinatePair::new(6.885789998771603, 89.45353374978681),
+                CoordinatePair::new(9.72849, 89.74737800000001),
+                CoordinatePair::new(12.196509552744402, 90.92131377228664),
+                CoordinatePair::new(13.450575259259264, 92.33098488888892),
+                CoordinatePair::new(14.083775088013303, 94.01611039126513),
+                CoordinatePair::new(14.20291140740741, 95.44912911111113),
+                CoordinatePair::new(14.004928, 96.96365600000001),
             ]
         );
     }
@@ -947,125 +910,49 @@ mod tests {
         "#;
         let result = parse(input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].len(), 31);
+        assert_eq!(result[0].len(), 39);
         assert_eq!(
             result[0],
             vec![
-                CoordinatePair { x: 10.0, y: 80.0 },
-                CoordinatePair {
-                    x: 18.274009596865902,
-                    y: 62.23607902107565
-                },
-                CoordinatePair {
-                    x: 25.54854286110641,
-                    y: 49.356797920419545
-                },
-                CoordinatePair {
-                    x: 32.00061859514943,
-                    y: 40.276471430451714
-                },
-                CoordinatePair {
-                    x: 37.76877706571886,
-                    y: 34.14452804422132
-                },
-                CoordinatePair {
-                    x: 42.977786748045155,
-                    y: 30.28862586112818
-                },
-                CoordinatePair {
-                    x: 47.75948795454129,
-                    y: 28.192810777806955
-                },
-                CoordinatePair {
-                    x: 52.26776775705932,
-                    y: 27.50166400871596
-                },
-                CoordinatePair {
-                    x: 56.67911619890174,
-                    y: 28.03853054445934
-                },
-                CoordinatePair {
-                    x: 61.17477190430957,
-                    y: 29.815620388680145
-                },
-                CoordinatePair {
-                    x: 65.91841423291706,
-                    y: 33.02014722137494
-                },
-                CoordinatePair {
-                    x: 71.04736316596855,
-                    y: 37.986586554742004
-                },
-                CoordinatePair {
-                    x: 76.67889180557972,
-                    y: 45.17533085552483
-                },
-                CoordinatePair {
-                    x: 82.92363487320814,
-                    y: 55.16763405833094
-                },
-                CoordinatePair {
-                    x: 89.90077281862139,
-                    y: 68.67838317092607
-                },
-                CoordinatePair { x: 95.0, y: 80.0 },
-                CoordinatePair {
-                    x: 103.2740095968659,
-                    y: 97.76392097892435
-                },
-                CoordinatePair {
-                    x: 110.5485428611064,
-                    y: 110.64320207958045
-                },
-                CoordinatePair {
-                    x: 117.00061859514942,
-                    y: 119.72352856954828
-                },
-                CoordinatePair {
-                    x: 122.76877706571884,
-                    y: 125.85547195577867
-                },
-                CoordinatePair {
-                    x: 127.97778674804515,
-                    y: 129.7113741388718
-                },
-                CoordinatePair {
-                    x: 132.7594879545413,
-                    y: 131.80718922219302
-                },
-                CoordinatePair {
-                    x: 137.26776775705935,
-                    y: 132.49833599128402
-                },
-                CoordinatePair {
-                    x: 141.67911619890177,
-                    y: 131.96146945554065
-                },
-                CoordinatePair {
-                    x: 146.17477190430958,
-                    y: 130.18437961131986
-                },
-                CoordinatePair {
-                    x: 150.91841423291706,
-                    y: 126.97985277862506
-                },
-                CoordinatePair {
-                    x: 156.04736316596853,
-                    y: 122.01341344525798
-                },
-                CoordinatePair {
-                    x: 161.67889180557972,
-                    y: 114.82466914447512
-                },
-                CoordinatePair {
-                    x: 167.92363487320813,
-                    y: 104.83236594166902
-                },
-                CoordinatePair {
-                    x: 174.90077281862128,
-                    y: 91.32161682907416
-                },
-                CoordinatePair { x: 180.0, y: 80.0 },
+                CoordinatePair::new(10.0, 80.0),
+                CoordinatePair::new(15.78100143969477, 67.25459368406422),
+                CoordinatePair::new(21.112891508939025, 56.89021833666841),
+                CoordinatePair::new(26.03493691503612, 48.59336957163201),
+                CoordinatePair::new(30.583422438239403, 42.07406572971166),
+                CoordinatePair::new(34.79388507225312, 37.06697733757036),
+                CoordinatePair::new(38.70370370370371, 33.333333333333336),
+                CoordinatePair::new(42.88612651359071, 30.34239438296855),
+                CoordinatePair::new(46.831649509423386, 28.490212691725404),
+                CoordinatePair::new(50.627640135655845, 27.608152315837724),
+                CoordinatePair::new(54.37235986434414, 27.608152315837728),
+                CoordinatePair::new(58.168350490576614, 28.490212691725404),
+                CoordinatePair::new(62.113873486409275, 30.342394382968557),
+                CoordinatePair::new(66.2962962962963, 33.33333333333333),
+                CoordinatePair::new(70.20611492774688, 37.06697733757035),
+                CoordinatePair::new(74.41657756176059, 42.07406572971165),
+                CoordinatePair::new(78.96506308496389, 48.593369571632),
+                CoordinatePair::new(83.88710849106097, 56.89021833666841),
+                CoordinatePair::new(89.21899856030524, 67.2545936840642),
+                CoordinatePair::new(95.0, 80.0),
+                CoordinatePair::new(100.78100143969478, 92.7454063159358),
+                CoordinatePair::new(106.112891508939, 103.10978166333157),
+                CoordinatePair::new(111.03493691503611, 111.40663042836799),
+                CoordinatePair::new(115.58342243823941, 117.92593427028837),
+                CoordinatePair::new(119.79388507225313, 122.93302266242966),
+                CoordinatePair::new(123.70370370370371, 126.66666666666669),
+                CoordinatePair::new(127.88612651359071, 129.65760561703146),
+                CoordinatePair::new(131.83164950942339, 131.50978730827458),
+                CoordinatePair::new(135.62764013565584, 132.39184768416223),
+                CoordinatePair::new(139.37235986434416, 132.3918476841623),
+                CoordinatePair::new(143.16835049057661, 131.50978730827458),
+                CoordinatePair::new(147.1138734864093, 129.65760561703146),
+                CoordinatePair::new(151.2962962962963, 126.66666666666666),
+                CoordinatePair::new(155.2061149277469, 122.93302266242966),
+                CoordinatePair::new(159.4165775617606, 117.92593427028835),
+                CoordinatePair::new(163.9650630849639, 111.40663042836802),
+                CoordinatePair::new(168.88710849106099, 103.1097816633316),
+                CoordinatePair::new(174.21899856030524, 92.74540631593578),
+                CoordinatePair::new(180.0, 80.0),
             ]
         );
     }
