@@ -21,13 +21,13 @@ default = []
 
 [dependencies]
 log = "^0.4"
-lyon_geom = "0.12"
-quick-xml = "0.13"
+lyon_geom = "0.17"
+quick-xml = "0.22"
 serde = { version = "1.0", optional = true, features = ["derive"] }
-svgtypes = "0.4"
+svgtypes = "0.8"
 
 [dev-dependencies]
-env_logger = "^0.6"
-serde_json = "^1.0"
+env_logger = "0.9"
+serde_json = "1"
 piston_window = "0.120"
 piston2d-drag_controller = "0.30"
