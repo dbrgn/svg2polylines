@@ -65,7 +65,7 @@ jobs:
             - /usr/local/cargo
   lint:
     docker:
-      - image: rust:1.47
+      - image: rust:1.55
     steps:
       - checkout
       - restore_cache:
