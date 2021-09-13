@@ -22,6 +22,7 @@
 #![allow(clippy::single_match)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::must_use_candidate)]
+#![allow(clippy::too_many_lines)]
 
 use std::convert;
 use std::mem;
@@ -113,7 +114,7 @@ impl CurrentLine {
 
     /// Return the last coordinate pair (if the line is not empty).
     fn last_pair(&self) -> Option<CoordinatePair> {
-        self.line.last().cloned()
+        self.line.last().copied()
     }
 
     /// Return the last x coordinate (if the line is not empty).
@@ -141,7 +142,7 @@ impl CurrentLine {
     /// Replace the internal polyline with a new instance and return the
     /// previously stored polyline.
     fn finish(&mut self) -> Polyline {
-        self.prev_end = self.line.last().cloned();
+        self.prev_end = self.line.last().copied();
         let mut tmp = Polyline::new();
         mem::swap(&mut self.line, &mut tmp);
         tmp
@@ -429,22 +430,22 @@ mod tests {
     #[test]
     fn test_current_line() {
         let mut line = CurrentLine::new();
-        assert_eq!(line.is_valid(), false);
+        assert!(!line.is_valid());
         assert_eq!(line.last_x(), None);
         assert_eq!(line.last_y(), None);
         line.add_absolute((1.0, 2.0).into());
-        assert_eq!(line.is_valid(), false);
+        assert!(!line.is_valid());
         assert_eq!(line.last_x(), Some(1.0));
         assert_eq!(line.last_y(), Some(2.0));
         line.add_absolute((2.0, 3.0).into());
-        assert_eq!(line.is_valid(), true);
+        assert!(line.is_valid());
         assert_eq!(line.last_x(), Some(2.0));
         assert_eq!(line.last_y(), Some(3.0));
         let finished = line.finish();
         assert_eq!(finished.len(), 2);
         assert_eq!(finished[0], (1.0, 2.0).into());
         assert_eq!(finished[1], (2.0, 3.0).into());
-        assert_eq!(line.is_valid(), false);
+        assert!(!line.is_valid());
     }
 
     #[test]
@@ -683,7 +684,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(lines.len(), 3);
-        assert_eq!(current_line.is_valid(), false);
+        assert!(!current_line.is_valid());
         let finished = current_line.finish();
         assert_eq!(finished.len(), 1);
     }
@@ -697,7 +698,7 @@ mod tests {
                 <path d="M 113,35 H 40 L -39,49 H 40" />
             </svg>
         "#;
-        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
+        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 4);
         assert_eq!(result[0][0], (113., 35.).into());
@@ -715,7 +716,7 @@ mod tests {
                 <path d="M 10,10 20,15 10,20 Z" />
             </svg>
         "#;
-        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
+        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 4);
         assert_eq!(result[0][0], (10., 10.).into());
@@ -741,7 +742,7 @@ mod tests {
                 <path d="M 10,10 20,15 10,20 Z m 0,40 H 0" />
             </svg>
         "#;
-        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
+        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 2);
 
         assert_eq!(result[0].len(), 4);
@@ -764,7 +765,7 @@ mod tests {
                 <path d="M 10,100 40,70 h 10 m -20,40 10,-20" />
             </svg>
         "#;
-        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
+        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
 
         // 2 Polylines
         assert_eq!(result.len(), 2);
@@ -793,7 +794,7 @@ mod tests {
                 <path d="M 10 20 c 0 0 1 -3 2 -5 s -10 -8 -2 5 z" />
             </svg>
         "#;
-        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
+        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 4);
         assert_eq!(result[0], result[1]);
         assert_eq!(result[0], result[2]);
@@ -809,7 +810,7 @@ mod tests {
                 <path d="M 10,100 40,70 h 10 m -20,40 10,-20" />
             </svg>
         "#;
-        let result = parse_xml(&input).unwrap();
+        let result = parse_xml(input).unwrap();
         assert_eq!(
             result,
             vec!["M 10,100 40,70 h 10 m -20,40 10,-20".to_string()]
@@ -826,7 +827,7 @@ mod tests {
                 <path d="M 20,30" />
             </svg>
         "#;
-        let result = parse_xml(&input).unwrap();
+        let result = parse_xml(input).unwrap();
         assert_eq!(
             result,
             vec![
@@ -846,7 +847,7 @@ mod tests {
                 <path d="M 20,30" d="M 10,100 40,70 h 10 m -20,40 10,-20"/>
             </svg>
         "#;
-        let result = parse_xml(&input).unwrap();
+        let result = parse_xml(input).unwrap();
         assert_eq!(result, vec!["M 20,30".to_string()]);
     }
 
@@ -858,7 +859,7 @@ mod tests {
                 <path d="M 20,30" d="M 10,100 40,70 h 10 m -20,40 10,-20"/>
             </baa>
         "#;
-        let result = parse_xml(&input);
+        let result = parse_xml(input);
         assert_eq!(
             result.unwrap_err(),
             "Error when parsing XML: Expecting </svg> found </baa>".to_string()
@@ -877,7 +878,7 @@ mod tests {
                 <path d="m 0.10650371,93.221877 c 0,0 3.74188519,-5.078118 9.62198629,-3.474499 5.880103,1.60362 4.276438,7.216278 4.276438,7.216278"/>
             </svg>
         "#;
-        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
+        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 11);
         assert_eq!(
@@ -944,7 +945,7 @@ mod tests {
                 <path d="M10 80 C 40 10, 65 10, 95 80 S 150 150, 180 80"/>
             </svg>
         "#;
-        let result = parse(&input, FLATTENING_TOLERANCE).unwrap();
+        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 31);
         assert_eq!(
