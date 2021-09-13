@@ -8,9 +8,27 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+
+## [0.6.0] - 2021-09-13
+
+Besides bugfixes, this release allows controlling the flattening tolerance.
+It's the 2nd parameter, which needs to be passed to the `parse` function.
+
+To get the same behavior as before, simply pass in the value `0.15`.
+
+### Added
+
+- Add `tol` parameter to remove flattening tolerance constant (#16)
+
+### Fixed
+
+- Fix incorrectly generated smooth curves (#17)
+
 ### Changed
 
 - This library no longer guarantees a fixed MSRV
+- FFI: Mark both functions as unsafe
+- Upgrade all dependencies
 
 
 ## [0.5.2] - 2019-08-11

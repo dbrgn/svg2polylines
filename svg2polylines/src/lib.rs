@@ -397,6 +397,12 @@ fn parse_path_segment(
 }
 
 /// Parse an SVG string into a vector of polylines.
+///
+/// The `tol` parameter controls the flattening tolerance. A large value (e.g.
+/// `10.0`) results in very coarse, jagged curves, while a small value (e.g.
+/// `0.05`) results in very smooth curves, but a lot of generated polylines.
+///
+/// Using a value of `0.15` is a good compromise.
 pub fn parse(svg: &str, tol: f64) -> Result<Vec<Polyline>, String> {
     trace!("parse");
 
