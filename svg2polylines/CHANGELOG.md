@@ -85,10 +85,10 @@ To get the same behavior as before, simply pass in the value `0.15`.
 - Update `svgparser` and `lyon_bezier` libraries
 
 
-[Unreleased]: https://github.com/dbrgn/svg2polylines/compare/svg2polylines-0.6.0...HEAD
-[0.6.0]: https://github.com/dbrgn/svg2polylines/compare/svg2polylines-0.5.2...svg2polylines-0.6.0
-[0.5.2]: https://github.com/dbrgn/svg2polylines/compare/svg2polylines-0.5.1...svg2polylines-0.5.2
-[0.5.1]: https://github.com/dbrgn/svg2polylines/compare/svg2polylines-0.5.0...svg2polylines-0.5.1
-[0.5.0]: https://github.com/dbrgn/svg2polylines/compare/svg2polylines-0.4.0...svg2polylines-0.5.0
+[Unreleased]: https://github.com/dbrgn/svg2polylines/compare/0.6.0...HEAD
+[0.6.0]: https://github.com/dbrgn/svg2polylines/compare/0.5.2...0.6.0
+[0.5.2]: https://github.com/dbrgn/svg2polylines/compare/0.5.1...0.5.2
+[0.5.1]: https://github.com/dbrgn/svg2polylines/compare/0.5.0...0.5.1
+[0.5.0]: https://github.com/dbrgn/svg2polylines/compare/svg2polylines-0.4.0...0.5.0
 [0.4.0]: https://github.com/dbrgn/svg2polylines/compare/svg2polylines-0.3.0...svg2polylines-0.4.0
 [0.3.0]: https://github.com/dbrgn/svg2polylines/compare/svg2polylines-0.2.0...svg2polylines-0.3.0
