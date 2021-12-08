@@ -389,6 +389,263 @@ fn parse_path_segment(
                 .close()
                 .map_err(|e| format!("Invalid state: {}", e))?;
         }
+        &PathSegment::EllipticalArc {
+            abs,
+            rx,
+            ry,
+            x_axis_rotation,
+            large_arc,
+            sweep,
+            x,
+            y,
+        } => {
+            // The following code and comments are taken from here:
+            // https://github.com/BigBadaboom/androidsvg (Apache-2 license)
+            // And more specifically here:
+            // https://github.com/BigBadaboom/androidsvg/blob/master/androidsvg/src/main/java/com/caverock/androidsvg/utils/SVGAndroidRenderer.java
+
+            /*
+             * SVG arc representation uses "endpoint parameterization" where we specify the start and endpoint of the arc.
+             * This is to be consistent with the other path commands.  However we need to convert this to "centre point
+             * parameterization" in order to calculate the arc. Handily, the SVG spec provides all the required maths
+             * in section "F.6 Elliptical arc implementation notes".
+             *
+             * Some of this code has been borrowed from the Batik library (Apache-2 license).
+             *
+             * Previously, to work around issue #62, we converted this function to use floats. However in issue #155,
+             * we discovered that there are some arcs that fail due of a lack of precision. So we have switched back to doubles.
+             */
+            trace!("parse_path_segment: EllipticalArc");
+            let current = current_line
+                .last_pair()
+                .ok_or("Invalid state: EllipticalArc on empty CurrentLine")?;
+            let last_x = current.x;
+            let last_y = current.y;
+
+            // Calculating the end points of the curve based on the abs flag
+            let x_end = if abs { x } else { current.x + x };
+            let y_end = if abs { y } else { current.y + y };
+
+            if last_x == x_end && last_y == y_end {
+                // If the endpoints (x, y) and (x0, y0) are identical, then this
+                // is equivalent to omitting the elliptical arc segment entirely.
+                // (behavior specified by the spec)
+                return Ok(());
+            }
+
+            // Handle degenerate case (behavior specified by the spec)
+            if rx == 0.0 || ry == 0.0 {
+                current_line.add(abs, CoordinatePair::new(x_end, y_end));
+                return Ok(());
+            }
+
+            // Sign of the radii is ignored (behavior specified by the spec)
+            let mut rx = rx.abs();
+            let mut ry = ry.abs();
+
+            // Convert angle from degrees to radians
+            let angle_rad = (x_axis_rotation % 360.0) * (std::f64::consts::PI / 180.0);
+            let cos_angle = angle_rad.cos();
+            let sin_angle = angle_rad.sin();
+
+            // We simplify the calculations by transforming the arc so that the origin is at the
+            // midpoint calculated above followed by a rotation to line up the coordinate axes
+            // with the axes of the ellipse.
+
+            // Compute the midpoint of the line between the current and the end point
+            let dx2 = (last_x - x_end) / 2.0;
+            let dy2 = (last_y - y_end) / 2.0;
+
+            // Step 1 : Compute (x1', y1')
+            // x1,y1 is the midpoint vector rotated to take the arc's angle out of consideration
+            let x1 = cos_angle * dx2 + sin_angle * dy2;
+            let y1 = -sin_angle * dx2 + cos_angle * dy2;
+
+            let mut rx_sq = rx * rx;
+            let mut ry_sq = ry * ry;
+            let x1_sq = x1 * x1;
+            let y1_sq = y1 * y1;
+
+            // Check that radii are large enough.
+            // If they are not, the spec says to scale them up so they are.
+            // This is to compensate for potential rounding errors/differences between SVG implementations.
+            let radii_check = x1_sq / rx_sq + y1_sq / ry_sq;
+            if radii_check > 0.99999 {
+                let radii_scale = radii_check.sqrt() * 1.00001;
+                rx *= radii_scale;
+                ry *= radii_scale;
+                rx_sq = rx * rx;
+                ry_sq = ry * ry;
+            }
+
+            // Step 2 : Compute (cx1, cy1) - the transformed centre point
+            let mut sign = if large_arc == sweep { -1.0 } else { 1.0 };
+            let mut sq = ((rx_sq * ry_sq) - (rx_sq * y1_sq) - (ry_sq * x1_sq))
+                / ((rx_sq * y1_sq) + (ry_sq * x1_sq));
+            sq = if sq < 0.0 { 0.0 } else { sq };
+            let coef = sign * sq.sqrt();
+            let cx1 = coef * ((rx * y1) / ry);
+            let cy1 = coef * -((ry * x1) / rx);
+
+            // Step 3 : Compute (cx, cy) from (cx1, cy1)
+            let sx2 = (last_x + x_end) / 2.0;
+            let sy2 = (last_y + y_end) / 2.0;
+            let cx = sx2 + (cos_angle * cx1 - sin_angle * cy1);
+            let cy = sy2 + (sin_angle * cx1 + cos_angle * cy1);
+
+            // Step 4 : Compute the angleStart (angle1) and the angleExtent (dangle)
+            let ux = (x1 - cx1) / rx;
+            let uy = (y1 - cy1) / ry;
+            let vx = (-x1 - cx1) / rx;
+            let vy = (-y1 - cy1) / ry;
+
+            let mut p;
+            let mut n;
+
+            // Angle betwen two vectors is +/- acos( u.v / len(u) * len(v))
+            // Where '.' is the dot product. And +/- is calculated from the sign of the cross product (u x v)
+
+            let two_pi = std::f64::consts::PI * 2.0;
+
+            // Compute the start angle
+            // The angle between (ux,uy) and the 0deg angle (1,0)
+            n = ((ux * ux) + (uy * uy)).sqrt(); // len(u) * len(1,0) == len(u)
+            p = ux; // u.v == (ux,uy).(1,0) == (1 * ux) + (0 * uy) == ux
+            sign = if uy < 0.0 { -1.0 } else { 1.0 }; // u x v == (1 * uy - ux * 0) == uy
+            let mut angle_start = sign * (p / n).acos(); // No need for checking the acos here. (p >= n) should always be true.
+
+            // Compute the angle extent
+            n = ((ux * ux + uy * uy) * (vx * vx + vy * vy)).sqrt();
+            p = ux * vx + uy * vy;
+            sign = if (ux * vy - uy * vx) < 0.0 { -1.0 } else { 1.0 };
+
+            let val = p / n;
+
+            let checked_arc_cos = if val < -1.0 {
+                std::f64::consts::PI
+            } else if val > 1.0 {
+                0.0
+            } else {
+                val.acos()
+            };
+            let mut angle_extent = sign * checked_arc_cos;
+
+            // Catch angleExtents of 0, which will cause problems later in arcToBeziers
+            if angle_extent == 0.0 {
+                current_line.add(abs, CoordinatePair::new(x_end, y_end));
+                return Ok(());
+            }
+
+            if !sweep && angle_extent > 0.0 {
+                angle_extent -= two_pi;
+            } else if sweep && angle_extent < 0.0 {
+                angle_extent += two_pi;
+            }
+            angle_extent %= two_pi;
+            angle_start %= two_pi;
+
+            // Many elliptical arc implementations including the Java2D and Android ones, only
+            // support arcs that are axis aligned.  Therefore we need to substitute the arc
+            // with bezier curves. The following function call will generate the beziers for
+            // a unit circle that covers the arc angles we want.
+
+            // The following code generates the control points and endpoints for a set of bezier
+            // curves that match a circular arc starting from angle 'angleStart' and sweep
+            // the angle 'angleExtent'.
+            // The circle the arc follows will be centred on (0,0) and have a radius of 1.0.
+            //
+            // Each bezier can cover no more than 90 degrees, so the arc will be divided evenly
+            // into a maximum of four curves times the set multiplier.
+            //
+            // The resulting control points will later be scaled and rotated to match the final
+            // arc required.
+
+            // Value that multiplies the amount of arcs created for ever arc. Higher values result
+            // in smoother curves
+            let segment_multiplier: f64 = 200.0;
+
+            let num_segments = (((angle_extent.abs() * 2.0 / std::f64::consts::PI).ceil())
+                * segment_multiplier) as usize;
+
+            let angle_increment = angle_extent / (num_segments) as f64;
+
+            // The length of each control point vector is given by the following formula.
+            let control_length =
+                4.0 / 3.0 * (angle_increment / 2.0).sin() / (1.0 + (angle_increment / 2.0).cos());
+
+            let mut bezier_points = Vec::with_capacity(num_segments * 3);
+            for i in 0..num_segments {
+                let mut angle = angle_start + i as f64 * angle_increment;
+                // Calculate the control vector at this angle
+                let mut dx = angle.cos();
+                let mut dy = angle.sin();
+
+                // First control point
+                bezier_points.push((dx - control_length * dy, dy + control_length * dx));
+
+                // Second control point
+                angle += angle_increment;
+                dx = angle.cos();
+                dy = angle.sin();
+                bezier_points.push((dx + control_length * dy, dy - control_length * dx));
+
+                // Endpoint of bezier
+                bezier_points.push((dx, dy));
+            }
+
+            let len = bezier_points.len();
+            // Check if no points were generated
+            if len == 0 {
+                return Ok(());
+            }
+
+            // Calculate a transformation matrix that will move and scale these bezier points to the correct location.
+            let mut bezier_points: Vec<(f64, f64)> = bezier_points
+                .into_iter()
+                // Scale
+                .map(|(a, b)| (a * rx, b * ry))
+                // Rotate around the calculated centre point
+                .map(|(a, b)| {
+                    let s = angle_rad.sin();
+                    let c = angle_rad.cos();
+
+                    let px = a - cx1;
+                    let py = b - cy1;
+
+                    let x_new = px * c - py * s;
+                    let y_new = px * s + py * c;
+
+                    (x_new + cx1, y_new + cy1)
+                })
+                // Translate
+                .map(|(a, b)| (a + cx, b + cy))
+                .collect();
+
+            // The last point in the bezier set should match exactly the last coord pair in the arc (ie: x,y). But
+            // considering all the mathematical manipulation we have been doing, it is bound to be off by a tiny
+            // fraction. Experiments show that it can be up to around 0.00002.  So why don't we just set it to
+            // exactly what it ought to be.
+            bezier_points[len - 1] = (x_end, y_end);
+
+            // Final step is to add the bezier curves to the path
+            let mut last_x = last_x;
+            let mut last_y = last_y;
+            // Step trough points 3 at a time
+            for i in (0..bezier_points.len()).step_by(3) {
+                let curve = CubicBezierSegment {
+                    from: Point2D::new(last_x, last_y),
+                    ctrl1: Point2D::new(bezier_points[i].0, bezier_points[i].1),
+                    ctrl2: Point2D::new(bezier_points[i + 1].0, bezier_points[i + 1].1),
+                    to: Point2D::new(bezier_points[i + 2].0, bezier_points[i + 2].1),
+                };
+                // End of last curve is used as start point of next curve
+                last_x = bezier_points[i + 2].0;
+                last_y = bezier_points[i + 2].1;
+                for point in curve.flattened(tol) {
+                    current_line.add_absolute(CoordinatePair::new(point.x, point.y));
+                }
+            }
+        }
         other => {
             return Err(format!("Unsupported path segment: {:?}", other));
         }
