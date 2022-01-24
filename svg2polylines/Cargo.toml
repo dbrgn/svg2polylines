@@ -29,5 +29,5 @@ svgtypes = "0.8"
 [dev-dependencies]
 env_logger = "0.9"
 serde_json = "1"
-piston_window = "0.120"
+piston_window = "0.121"
 piston2d-drag_controller = "0.30"
