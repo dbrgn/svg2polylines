@@ -555,17 +555,12 @@ fn parse_path_segment(
             // The circle the arc follows will be centred on (0,0) and have a radius of 1.0.
             //
             // Each bezier can cover no more than 90 degrees, so the arc will be divided evenly
-            // into a maximum of four curves times the set multiplier.
+            // into a maximum of four curves.
             //
             // The resulting control points will later be scaled and rotated to match the final
             // arc required.
 
-            // Value that multiplies the amount of arcs created for ever arc. Higher values result
-            // in smoother curves
-            let segment_multiplier: f64 = 200.0;
-
-            let num_segments = (((angle_extent.abs() * 2.0 / std::f64::consts::PI).ceil())
-                * segment_multiplier) as usize;
+            let num_segments = (angle_extent.abs() * 2.0 / std::f64::consts::PI).ceil() as usize;
 
             let angle_increment = angle_extent / (num_segments) as f64;
 
