@@ -170,10 +170,10 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall
 be dual licensed as above, without any additional terms or conditions.
 
 
-[circle-ci]: https://circleci.com/gh/dbrgn/svg2polylines/tree/master
-[circle-ci-badge]: https://circleci.com/gh/dbrgn/svg2polylines/tree/master.svg?style=shield
+[circle-ci]: https://circleci.com/gh/dbrgn/svg2polylines/tree/main
+[circle-ci-badge]: https://circleci.com/gh/dbrgn/svg2polylines/tree/main.svg?style=shield
 [crates-io]: https://crates.io/crates/svg2polylines
 [crates-io-badge]: https://img.shields.io/crates/v/svg2polylines.svg
-[example-src]: https://github.com/dbrgn/svg2polylines/blob/master/svg2polylines/examples/basic.rs
-[example-c]: https://github.com/dbrgn/svg2polylines/blob/master/svg2polylines-ffi/example.c
-[example-python]: https://github.com/dbrgn/svg2polylines/blob/master/svg2polylines-ffi/example.py
+[example-src]: https://github.com/dbrgn/svg2polylines/blob/main/svg2polylines/examples/basic.rs
+[example-c]: https://github.com/dbrgn/svg2polylines/blob/main/svg2polylines-ffi/example.c
+[example-python]: https://github.com/dbrgn/svg2polylines/blob/main/svg2polylines-ffi/example.py

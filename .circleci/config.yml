@@ -104,7 +104,7 @@ workflows:
       - lint
       - rustfmt
 
-  # Build master every week on Monday at 03:00 am
+  # Build main every week on Monday at 03:00 am
   weekly:
     triggers:
       - schedule:
@@ -112,7 +112,7 @@ workflows:
           filters:
             branches:
               only:
-                - master
+                - main
     jobs:
       - test
       - test-ffi
