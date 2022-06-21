@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [Unreleased]
 
 
+## [0.7.0] - 2022-06-22
+
+### Added
+
+- Implement support for elliptical arcs (#26, #19)
+
+### Changed
+
+- Update all dependencies
+
+
 ## [0.6.0] - 2021-09-13
 
 Besides bugfixes, this release allows controlling the flattening tolerance.
@@ -85,7 +96,8 @@ To get the same behavior as before, simply pass in the value `0.15`.
 - Update `svgparser` and `lyon_bezier` libraries
 
 
-[Unreleased]: https://github.com/dbrgn/svg2polylines/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/dbrgn/svg2polylines/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/dbrgn/svg2polylines/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/dbrgn/svg2polylines/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/dbrgn/svg2polylines/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/dbrgn/svg2polylines/compare/v0.5.0...v0.5.1
