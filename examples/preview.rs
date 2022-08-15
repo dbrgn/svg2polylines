@@ -28,7 +28,7 @@ fn main() {
     file.read_to_string(&mut s).unwrap();
 
     // Parse data
-    let polylines: Vec<Polyline> = svg2polylines::parse(&s, 0.15).unwrap_or_else(|e| {
+    let polylines: Vec<Polyline> = svg2polylines::parse(&s, 0.15, true).unwrap_or_else(|e| {
         println!("Error: {}", e);
         exit(2);
     });

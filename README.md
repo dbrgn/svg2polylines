@@ -10,7 +10,8 @@ This can be used e.g. for simple drawing robot that just support drawing
 straight lines and liftoff / drop pen commands.
 
 Flattening of Bézier curves is done using the
-[Lyon](https://github.com/nical/lyon) library.
+[Lyon](https://github.com/nical/lyon) library. SVG files are preprocessed /
+simplified using [usvg](https://docs.rs/usvg/).
 
 **Note: Currently the path style is completely ignored. Only the path itself is
 returned.**
@@ -35,7 +36,7 @@ Use the mouse to drag the image and the `Esc` key to close the window.
 Signature:
 
 ```rust
-fn svg2polylines::parse(&str) -> Result<Vec<Polyline>, String>;
+fn svg2polylines::parse(svg: &str, tol: f64, preprocess: bool) -> Result<Vec<Polyline>, String>;
 ```
 
 See [`examples/basic.rs`][example-src] for a full usage example.

@@ -651,16 +651,33 @@ fn parse_path_segment(
 
 /// Parse an SVG string into a vector of polylines.
 ///
+/// ## Flattening tolerance
+///
 /// The `tol` parameter controls the flattening tolerance. A large value (e.g.
 /// `10.0`) results in very coarse, jagged curves, while a small value (e.g.
 /// `0.05`) results in very smooth curves, but a lot of generated polylines.
 ///
 /// Using a value of `0.15` is a good compromise.
-pub fn parse(svg: &str, tol: f64) -> Result<Vec<Polyline>, String> {
+///
+/// ## Preprocessing
+///
+/// If `preprocess` is set to `true`,
+pub fn parse(svg: &str, tol: f64, preprocess: bool) -> Result<Vec<Polyline>, String> {
     trace!("parse");
 
+    // Preprocess and simplify the SVG using the usvg library
+    let svg = if preprocess {
+        let usvg_input_options = usvg::Options::default();
+        let usvg_tree = usvg::Tree::from_str(svg, &usvg_input_options.to_ref())
+            .map_err(|e| format!("Could not simplify input SVG with usvg: {}", e))?;
+        let usvg_xml_options = usvg::XmlOptions::default();
+        usvg_tree.to_string(&usvg_xml_options)
+    } else {
+        svg.to_string()
+    };
+
     // Parse the XML string into a list of path expressions
-    let path_exprs = parse_xml(svg)?;
+    let path_exprs = parse_xml(&svg)?;
     trace!("parse: Found {} path expressions", path_exprs.len());
 
     // Vector that will hold resulting polylines
@@ -952,8 +969,9 @@ mod tests {
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
                 <path d="M 113,35 H 40 L -39,49 H 40" />
             </svg>
-        "#;
-        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
+        "#
+        .trim();
+        let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 4);
         assert_eq!(result[0][0], (113., 35.).into());
@@ -970,8 +988,9 @@ mod tests {
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
                 <path d="M 10,10 20,15 10,20 Z" />
             </svg>
-        "#;
-        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
+        "#
+        .trim();
+        let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 4);
         assert_eq!(result[0][0], (10., 10.).into());
@@ -996,8 +1015,9 @@ mod tests {
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
                 <path d="M 10,10 20,15 10,20 Z m 0,40 H 0" />
             </svg>
-        "#;
-        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
+        "#
+        .trim();
+        let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 2);
 
         assert_eq!(result[0].len(), 4);
@@ -1019,8 +1039,9 @@ mod tests {
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
                 <path d="M 10,100 40,70 h 10 m -20,40 10,-20" />
             </svg>
-        "#;
-        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
+        "#
+        .trim();
+        let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
 
         // 2 Polylines
         assert_eq!(result.len(), 2);
@@ -1048,8 +1069,9 @@ mod tests {
                 <path d="M 10 20 c 0 0 1 -3 2 -5 S 2 7 10 20 z" />
                 <path d="M 10 20 c 0 0 1 -3 2 -5 s -10 -8 -2 5 z" />
             </svg>
-        "#;
-        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
+        "#
+        .trim();
+        let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 4);
         assert_eq!(result[0], result[1]);
         assert_eq!(result[0], result[2]);
@@ -1064,7 +1086,8 @@ mod tests {
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
                 <path d="M 10,100 40,70 h 10 m -20,40 10,-20" />
             </svg>
-        "#;
+        "#
+        .trim();
         let result = parse_xml(input).unwrap();
         assert_eq!(
             result,
@@ -1081,7 +1104,8 @@ mod tests {
                 <path d="M 10,100 40,70 h 10 m -20,40 10,-20" />
                 <path d="M 20,30" />
             </svg>
-        "#;
+        "#
+        .trim();
         let result = parse_xml(input).unwrap();
         assert_eq!(
             result,
@@ -1101,7 +1125,8 @@ mod tests {
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
                 <path d="M 20,30" d="M 10,100 40,70 h 10 m -20,40 10,-20"/>
             </svg>
-        "#;
+        "#
+        .trim();
         let result = parse_xml(input).unwrap();
         assert_eq!(result, vec!["M 20,30".to_string()]);
     }
@@ -1113,7 +1138,8 @@ mod tests {
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
                 <path d="M 20,30" d="M 10,100 40,70 h 10 m -20,40 10,-20"/>
             </baa>
-        "#;
+        "#
+        .trim();
         let result = parse_xml(input);
         assert_eq!(
             result.unwrap_err(),
@@ -1132,8 +1158,8 @@ mod tests {
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
                 <path d="m 0.10650371,93.221877 c 0,0 3.74188519,-5.078118 9.62198629,-3.474499 5.880103,1.60362 4.276438,7.216278 4.276438,7.216278"/>
             </svg>
-        "#;
-        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
+        "#.trim();
+        let result = parse(input, FLATTENING_TOLERANCE, false).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 11);
         assert_eq!(
@@ -1166,8 +1192,9 @@ mod tests {
             <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
                 <path d="M10 80 C 40 10, 65 10, 95 80 S 150 150, 180 80"/>
             </svg>
-        "#;
-        let result = parse(input, FLATTENING_TOLERANCE).unwrap();
+        "#
+        .trim();
+        let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].len(), 39);
         assert_eq!(
