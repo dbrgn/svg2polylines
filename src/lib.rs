@@ -34,14 +34,17 @@ use std::{
 };
 
 use log::trace;
-use lyon_geom::{euclid::Point2D, CubicBezierSegment, QuadraticBezierSegment};
-use quick_xml::{events::attributes::Attribute, events::Event};
+use lyon_geom::{
+    euclid::{Point2D, Transform2D},
+    CubicBezierSegment, QuadraticBezierSegment,
+};
+use quick_xml::events::Event;
 use svgtypes::{PathParser, PathSegment};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A `CoordinatePair` consists of an x and y coordinate.
+/// A pair of x and y coordinates.
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
@@ -53,6 +56,13 @@ pub struct CoordinatePair {
 impl CoordinatePair {
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
+    }
+
+    /// Apply a 2D transformation.
+    pub fn transform(&mut self, t: Transform2D<f64, f64, f64>) {
+        let Point2D { x, y, .. } = t.transform_point(Point2D::new(self.x, self.y));
+        self.x = x;
+        self.y = y;
     }
 }
 
@@ -80,6 +90,14 @@ impl Polyline {
     /// Create a new polyline from a vector.
     pub fn from_vec(vec: Vec<CoordinatePair>) -> Self {
         Polyline(vec)
+    }
+
+    /// Apply a transformation to all coordinate pairs
+    fn transform(mut self, t: Transform2D<f64, f64, f64>) -> Self {
+        for p in &mut self.0 {
+            p.transform(t);
+        }
+        self
     }
 
     /// Push a [`CoordinatePair`] to the end of the polyline.
@@ -213,8 +231,9 @@ impl CurrentLine {
     }
 }
 
-/// Parse an SVG string, return vector of path expressions.
-fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
+/// Parse an SVG string, return vector of `(path expression, transform
+/// expression)` tuples.
+fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, String> {
     trace!("parse_xml");
 
     let mut reader = quick_xml::Reader::from_str(svg);
@@ -228,21 +247,23 @@ fn parse_xml(svg: &str) -> Result<Vec<String>, String> {
                 trace!("parse_xml: Matched start of {:?}", e.name());
                 match e.name() {
                     b"path" => {
-                        trace!("parse_xml: Found path attribute");
-                        let path_expr: Option<String> = e
-                            .attributes()
-                            .filter_map(Result::ok)
-                            .find_map(|attr: Attribute| {
-                                if attr.key == b"d" {
-                                    attr.unescaped_value()
-                                        .ok()
-                                        .and_then(|v| str::from_utf8(&v).map(str::to_string).ok())
-                                } else {
-                                    None
-                                }
-                            });
+                        trace!("parse_xml: Found path element");
+                        let mut path_expr: Option<String> = None;
+                        let mut transform_expr: Option<String> = None;
+                        for attr in e.attributes().filter_map(Result::ok) {
+                            let extract = || {
+                                attr.unescaped_value()
+                                    .ok()
+                                    .and_then(|v| str::from_utf8(&v).map(str::to_string).ok())
+                            };
+                            match attr.key {
+                                b"d" => path_expr = extract(),
+                                b"transform" => transform_expr = extract(),
+                                _ => {}
+                            }
+                        }
                         if let Some(expr) = path_expr {
-                            paths.push(expr);
+                            paths.push((expr, transform_expr));
                         }
                     }
                     _ => {}
@@ -717,7 +738,50 @@ fn parse_path_segment(
     Ok(())
 }
 
-/// Parse an SVG string into a vector of polylines.
+/// Parse an SVG transformation into a ``Transform2D``.
+///
+/// Only matrix transformations are supported at the moment. (This shouldn't be
+/// an issue, because usvg converts all transformations into matrices.)
+#[allow(clippy::many_single_char_names)]
+fn parse_transform(transform: &str) -> Result<Transform2D<f64, f64, f64>, String> {
+    // Extract matrix elements from SVG string
+    let transform = transform.trim();
+    if !transform.starts_with("matrix(") {
+        return Err(format!(
+            "Only 'matrix' transform supported in transform '{}'",
+            transform
+        ));
+    }
+    if !transform.ends_with(')') {
+        return Err(format!(
+            "Missing closing parenthesis in transform '{}'",
+            transform
+        ));
+    }
+    let matrix = transform
+        .strip_prefix("matrix(")
+        .expect("checked before")
+        .strip_suffix(')')
+        .expect("checked to be there");
+
+    // Convert elements to floats
+    let elements = matrix
+        .split_whitespace()
+        .map(str::parse)
+        .collect::<Result<Vec<f64>, _>>()
+        .map_err(|_| format!("Invalid matrix coefficients in transform '{}'", transform))?;
+
+    // Convert floats into Transform2D
+    let [a, b, c, d, e, f]: [f64; 6] = elements.as_slice().try_into().map_err(|_| {
+        format!(
+            "Invalid number of matrix coefficients in transform '{}'",
+            transform
+        )
+    })?;
+    Ok(Transform2D::new(a, b, c, d, e, f))
+}
+
+/// Parse an SVG string into a vector of [`Polyline`]s.
 ///
 /// ## Flattening tolerance
 ///
@@ -752,8 +816,14 @@ pub fn parse(svg: &str, tol: f64, preprocess: bool) -> Result<Vec<Polyline>, Str
     let mut polylines: Vec<Polyline> = Vec::new();
 
     // Process path expressions
-    for expr in path_exprs {
-        polylines.extend(parse_path(&expr, tol)?);
+    for (path_expr, transform_expr) in path_exprs {
+        let path = parse_path(&path_expr, tol)?;
+        if let Some(e) = transform_expr {
+            let t = parse_transform(&e)?;
+            polylines.extend(path.into_iter().map(|polyline| polyline.transform(t)));
+        } else {
+            polylines.extend(path);
+        }
     }
 
     trace!("parse: This results in {} polylines", polylines.len());
@@ -1159,7 +1229,7 @@ mod tests {
         let result = parse_xml(input).unwrap();
         assert_eq!(
             result,
-            vec!["M 10,100 40,70 h 10 m -20,40 10,-20".to_string()]
+            vec![("M 10,100 40,70 h 10 m -20,40 10,-20".to_string(), None)]
         );
     }
 
@@ -1178,8 +1248,8 @@ mod tests {
         assert_eq!(
             result,
             vec![
-                "M 10,100 40,70 h 10 m -20,40 10,-20".to_string(),
-                "M 20,30".to_string(),
+                ("M 10,100 40,70 h 10 m -20,40 10,-20".to_string(), None),
+                ("M 20,30".to_string(), None),
             ]
         );
     }
@@ -1196,7 +1266,31 @@ mod tests {
         "#
         .trim();
         let result = parse_xml(input).unwrap();
-        assert_eq!(result, vec!["M 20,30".to_string()]);
+        assert_eq!(result, vec![("M 20,30".to_string(), None)]);
+    }
+
+    #[test]
+    fn test_parse_xml_with_transform() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M 20,30" transform="matrix(1 0 0 1 0 0)"/>
+                <path d="M 30,40"/>
+            </svg>
+        "#
+        .trim();
+        let result = parse_xml(input).unwrap();
+        assert_eq!(
+            result,
+            vec![
+                (
+                    "M 20,30".to_string(),
+                    Some("matrix(1 0 0 1 0 0)".to_string())
+                ),
+                ("M 30,40".to_string(), None)
+            ],
+        );
     }
 
     #[test]
@@ -1309,5 +1403,81 @@ mod tests {
                 CoordinatePair::new(180.0, 80.0),
             ])
         );
+    }
+
+    #[test]
+    fn test_parse_transform_matrix() {
+        // Identity matrix:
+        // |1  0  0|
+        // |0  1  0|
+        // |0  0  1|
+        assert_eq!(
+            parse_transform("matrix(1 0 0 1 0 0)"),
+            Ok(Transform2D::identity())
+        );
+
+        // Scaling matrix (expand in X, compress in Y)
+        // |2  0  0|
+        // |0 .5  0|
+        // |0  0  1|
+        assert_eq!(
+            parse_transform("matrix(2 0 0 0.5 0 0)"),
+            Ok(Transform2D::scale(2.0, 0.5))
+        );
+
+        // Translation matrix
+        // |1  0  3|
+        // |0  1 -5|
+        // |0  0  1|
+        assert_eq!(
+            parse_transform("matrix(1 0 0 1 3 -5.0)"),
+            Ok(Transform2D::translation(3.0, -5.0))
+        );
+    }
+
+    // Given the line `1,2 2,4`, apply the following transformation matrix:
+    //
+    // |1  0  2|
+    // |0 .5 -4|
+    // |0  0  1|
+    //
+    // This applies the following steps:
+    //
+    // - Scale Y by 0.5
+    // - Translate by (2,-4)
+    #[test]
+    fn test_apply_transformation_matrix() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M 1,2 2,4" transform="matrix(1 0 0 0.5 2 -4)"/>
+            </svg>
+        "#
+        .trim();
+        let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 2);
+        assert_eq!(result[0][0], (3., -3.).into());
+        assert_eq!(result[0][1], (4., -2.).into());
+    }
+
+    // Like `test_apply_transformation_matrix`, but with discrete
+    // transformations. These should be simplified by usvg.
+    #[test]
+    fn test_apply_transformations() {
+        let _ = env_logger::try_init();
+        let input = r#"
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+                <path d="M 1,2 2,4" transform="translate(2 -4) scale(1 0.5)"/>
+            </svg>
+        "#
+        .trim();
+        let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 2);
+        assert_eq!(result[0][0], (3., -3.).into());
+        assert_eq!(result[0][1], (4., -2.).into());
     }
 }
