@@ -5,12 +5,17 @@
 //! straight lines and liftoff / drop pen commands.
 //!
 //! Flattening of Bézier curves is done using the
-//! [Lyon](https://github.com/nical/lyon) library.
+//! [Lyon](https://github.com/nical/lyon) library. SVG files are preprocessed /
+//! simplified using [usvg](https://docs.rs/usvg/).
 //!
 //! **Note: Currently the path style is completely ignored. Only the path itself is
 //! returned.**
 //!
-//! Minimal supported Rust version: 1.31 (Rust 2018).
+//! ## MSRV
+//!
+//! This library does not guarantee a fixed MSRV.
+//!
+//! ## Serialization
 //!
 //! You can optionally get serde 1 support by enabling the `serde` feature.
 

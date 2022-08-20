@@ -28,7 +28,7 @@ cargo run --release --example preview path/to/file.svg
 
 The `--release` parameter is important, otherwise it's going to be very slow.
 
-Use the mouse to drag the image and the `Esc` key to close the window.
+Use the mouse to drag / zoom the image and the `Esc` key to close the window.
 
 
 ## Usage: Rust
