@@ -1,13 +1,11 @@
 #![allow(clippy::clone_on_copy)]
 
-use std::env;
-use std::fs;
-use std::io::Read;
-use std::process::exit;
+use std::{env, fs, io::Read, process::exit};
 
 use drag_controller::{Drag, DragController};
-use piston_window::math::Matrix2d;
-use piston_window::{clear, line, PistonWindow, Transformed, WindowSettings};
+use piston_window::{
+    clear, line, math::Matrix2d, Event, Input, Motion, PistonWindow, Transformed, WindowSettings,
+};
 use svg2polylines::{self, Polyline};
 
 fn main() {
@@ -40,8 +38,8 @@ fn main() {
     }
 
     // Create window
-    let scale = 2;
-    let fscale = 2.0;
+    let scale = 2; // Window scaling
+    let mut zoom = 1.0;
     let window_size = [716 * scale, 214 * scale];
     let mut window: PistonWindow = WindowSettings::new("Preview (press ESC to exit)", window_size)
         .exit_on_esc(true)
@@ -56,6 +54,18 @@ fn main() {
     let mut translate_tmp: Matrix2d = translate.clone();
     let mut translate_start = None;
     while let Some(e) = window.next() {
+        // Handle mouse wheel events
+        if let Event::Input(Input::Move(Motion::MouseScroll([_, y])), _) = e {
+            if y > 0.0 {
+                // Zoom in by 10%
+                zoom *= 1.1;
+            } else if y < 0.0 {
+                // Zoom out by 10%
+                zoom *= 0.9;
+            }
+        };
+
+        // Handle dragging
         drag.event(&e, |action| {
             match action {
                 Drag::Start(x, y) => {
@@ -77,6 +87,8 @@ fn main() {
                 Drag::Interrupt => true,
             }
         });
+
+        // Redraw
         window.draw_2d(&e, |ctx, g, _device| {
             clear([1.0; 4], g);
             for polyline in &polylines {
@@ -87,7 +99,7 @@ fn main() {
                         [pair[0].x, pair[0].y, pair[1].x, pair[1].y],
                         ctx.transform
                             .append_transform(translate_tmp)
-                            .scale(fscale, fscale),
+                            .scale(zoom, zoom),
                         g,
                     );
                 }
