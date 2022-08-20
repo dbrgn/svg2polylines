@@ -92,7 +92,7 @@ fn main() {
         window.draw_2d(&e, |ctx, g, _device| {
             clear([1.0; 4], g);
             for polyline in &polylines {
-                for pair in polyline.windows(2) {
+                for pair in polyline.as_ref().windows(2) {
                     line(
                         black,
                         radius,

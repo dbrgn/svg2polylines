@@ -28,7 +28,9 @@
 
 use std::{
     convert::{From, TryInto},
-    f64, mem, str,
+    f64, mem,
+    ops::Index,
+    str,
 };
 
 use log::trace;
@@ -60,8 +62,69 @@ impl From<(f64, f64)> for CoordinatePair {
     }
 }
 
-/// A polyline is a vector of `CoordinatePair` instances.
-pub type Polyline = Vec<CoordinatePair>;
+/// A polyline is a vector of [`CoordinatePair`] instances.
+///
+/// Note: This is a newtype around a [`Vec`] that can be iterated and indexed.
+/// To get access to the underlying vector, use [`.as_ref()`](Polyline::as_ref)
+/// or [`.unwrap()`](Polyline::unwrap).
+#[repr(transparent)]
+#[derive(Debug, PartialEq)]
+pub struct Polyline(Vec<CoordinatePair>);
+
+impl Polyline {
+    /// Create a new, empty polyline.
+    pub fn new() -> Self {
+        Polyline(vec![])
+    }
+
+    /// Create a new polyline from a vector.
+    pub fn from_vec(vec: Vec<CoordinatePair>) -> Self {
+        Polyline(vec)
+    }
+
+    /// Push a [`CoordinatePair`] to the end of the polyline.
+    fn push(&mut self, val: CoordinatePair) {
+        self.0.push(val);
+    }
+
+    /// Number of [`CoordinatePair`]s in this polyline.
+    #[must_use]
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Last [`CoordinatePair`] of this polyline.
+    #[must_use]
+    fn last(&self) -> Option<&CoordinatePair> {
+        self.0.last()
+    }
+
+    /// Unwrap and return the inner vector.
+    #[must_use]
+    pub fn unwrap(self) -> Vec<CoordinatePair> {
+        self.0
+    }
+}
+
+impl AsRef<Vec<CoordinatePair>> for Polyline {
+    fn as_ref(&self) -> &Vec<CoordinatePair> {
+        &self.0
+    }
+}
+
+impl Default for Polyline {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Index<usize> for Polyline {
+    type Output = CoordinatePair;
+
+    fn index(&self, id: usize) -> &Self::Output {
+        &self.0[id]
+    }
+}
 
 #[derive(Debug, PartialEq)]
 struct CurrentLine {
@@ -73,7 +136,7 @@ struct CurrentLine {
     prev_end: Option<CoordinatePair>,
 }
 
-/// Simple data structure that acts as a Polyline buffer.
+/// Simple data structure that acts as a [`Polyline`] buffer.
 impl CurrentLine {
     fn new() -> Self {
         Self {
@@ -82,12 +145,12 @@ impl CurrentLine {
         }
     }
 
-    /// Add a `CoordinatePair` to the internal polyline.
+    /// Add a [`CoordinatePair`] to the internal polyline.
     fn add_absolute(&mut self, pair: CoordinatePair) {
         self.line.push(pair);
     }
 
-    /// Add a relative `CoordinatePair` to the internal polyline.
+    /// Add a relative [`CoordinatePair`] to the internal polyline.
     fn add_relative(&mut self, pair: CoordinatePair) {
         if let Some(last) = self.line.last() {
             let cp = CoordinatePair::new(last.x + pair.x, last.y + pair.y);
@@ -99,7 +162,7 @@ impl CurrentLine {
         }
     }
 
-    /// Add a `CoordinatePair` to the internal polyline.
+    /// Add a [`CoordinatePair`] to the internal polyline.
     fn add(&mut self, abs: bool, pair: CoordinatePair) {
         if abs {
             self.add_absolute(pair);
@@ -108,12 +171,12 @@ impl CurrentLine {
         }
     }
 
-    /// A polyline is only valid if it has more than 1 `CoordinatePair`.
+    /// A polyline is only valid if it has more than 1 [`CoordinatePair`].
     fn is_valid(&self) -> bool {
         self.line.len() > 1
     }
 
-    /// Return the last coordinate pair (if the line is not empty).
+    /// Return the last [`CoordinatePair`] (if the line is not empty).
     fn last_pair(&self) -> Option<CoordinatePair> {
         self.line.last().copied()
     }
@@ -140,8 +203,8 @@ impl CurrentLine {
         }
     }
 
-    /// Replace the internal polyline with a new instance and return the
-    /// previously stored polyline.
+    /// Replace the internal [`Polyline`] with a new instance and return the
+    /// previously stored [`Polyline`].
     fn finish(&mut self) -> Polyline {
         self.prev_end = self.line.last().copied();
         let mut tmp = Polyline::new();
@@ -1169,7 +1232,7 @@ mod tests {
         assert_eq!(result[0].len(), 11);
         assert_eq!(
             result[0],
-            vec![
+            Polyline(vec![
                 CoordinatePair::new(0.10650371, 93.221877),
                 CoordinatePair::new(1.294403614814815, 91.96472118518521),
                 CoordinatePair::new(2.6361703106158485, 90.93256152046511),
@@ -1181,7 +1244,7 @@ mod tests {
                 CoordinatePair::new(14.083775088013303, 94.01611039126513),
                 CoordinatePair::new(14.20291140740741, 95.44912911111113),
                 CoordinatePair::new(14.004928, 96.96365600000001),
-            ]
+            ])
         );
     }
 
@@ -1204,7 +1267,7 @@ mod tests {
         assert_eq!(result[0].len(), 39);
         assert_eq!(
             result[0],
-            vec![
+            Polyline(vec![
                 CoordinatePair::new(10.0, 80.0),
                 CoordinatePair::new(15.78100143969477, 67.25459368406422),
                 CoordinatePair::new(21.112891508939025, 56.89021833666841),
@@ -1244,7 +1307,7 @@ mod tests {
                 CoordinatePair::new(168.88710849106099, 103.1097816633316),
                 CoordinatePair::new(174.21899856030524, 92.74540631593578),
                 CoordinatePair::new(180.0, 80.0),
-            ]
+            ])
         );
     }
 }
