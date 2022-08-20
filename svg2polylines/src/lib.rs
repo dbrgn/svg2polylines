@@ -12,9 +12,6 @@
 //!
 //! Minimal supported Rust version: 1.31 (Rust 2018).
 //!
-//! FFI bindings for this crate can be found [on
-//! Github](https://github.com/dbrgn/svg2polylines).
-//!
 //! You can optionally get serde 1 support by enabling the `serde` feature.
 
 #![deny(clippy::all)]
