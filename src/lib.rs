@@ -44,6 +44,10 @@ use svgtypes::{PathParser, PathSegment};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+mod error;
+
+pub use error::Error;
+
 /// A pair of x and y coordinates.
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -210,9 +214,11 @@ impl CurrentLine {
     }
 
     /// Close the line by adding the first entry to the end.
-    fn close(&mut self) -> Result<(), String> {
+    fn close(&mut self) -> Result<(), Error> {
         if self.line.len() < 2 {
-            Err("Lines with less than 2 coordinate pairs cannot be closed.".into())
+            Err(Error::Polyline(
+                "Lines with less than 2 coordinate pairs cannot be closed.".into(),
+            ))
         } else {
             let first = self.line[0];
             self.line.push(first);
@@ -233,7 +239,7 @@ impl CurrentLine {
 
 /// Parse an SVG string, return vector of `(path expression, transform
 /// expression)` tuples.
-fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, String> {
+fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
     trace!("parse_xml");
 
     let mut reader = quick_xml::Reader::from_str(svg);
@@ -274,7 +280,7 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, String> {
                 break;
             }
             Ok(_) => {}
-            Err(e) => return Err(format!("Error when parsing XML: {}", e)),
+            Err(e) => return Err(Error::SvgParse(e.to_string())),
         }
 
         // If we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
@@ -284,7 +290,7 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, String> {
     Ok(paths)
 }
 
-fn parse_path(expr: &str, tol: f64) -> Result<Vec<Polyline>, String> {
+fn parse_path(expr: &str, tol: f64) -> Result<Vec<Polyline>, Error> {
     trace!("parse_path");
     let mut lines = Vec::new();
     let mut line = CurrentLine::new();
@@ -292,8 +298,7 @@ fn parse_path(expr: &str, tol: f64) -> Result<Vec<Polyline>, String> {
     // Process segments in path expression
     let mut prev_segment_store: Option<PathSegment> = None;
     for segment in PathParser::from(expr) {
-        let current_segment =
-            segment.map_err(|e| format!("Could not parse path segment: {}", e))?;
+        let current_segment = segment.map_err(|e| Error::PathParse(e.to_string()))?;
         let prev_segment = prev_segment_store.replace(current_segment);
         parse_path_segment(&current_segment, prev_segment, &mut line, tol, &mut lines)?;
     }
@@ -318,10 +323,10 @@ fn _handle_cubic_curve(
     y2: f64,
     x: f64,
     y: f64,
-) -> Result<(), String> {
-    let current = current_line
-        .last_pair()
-        .ok_or("Invalid state: CurveTo or SmoothCurveTo on empty CurrentLine")?;
+) -> Result<(), Error> {
+    let current = current_line.last_pair().ok_or_else(|| {
+        Error::PathParse("Invalid state: CurveTo or SmoothCurveTo on empty CurrentLine".to_string())
+    })?;
     let curve = if abs {
         CubicBezierSegment {
             from: Point2D::new(current.x, current.y),
@@ -350,7 +355,7 @@ fn parse_path_segment(
     current_line: &mut CurrentLine,
     tol: f64,
     lines: &mut Vec<Polyline>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     trace!("parse_path_segment");
     #[allow(clippy::match_wildcard_for_single_variants)]
     match segment {
@@ -371,7 +376,9 @@ fn parse_path_segment(
                 (Some(y), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
                 (Some(_), false) => current_line.add_relative(CoordinatePair::new(x, 0.0)),
                 (None, _) => {
-                    return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into())
+                    return Err(Error::PathParse(
+                        "Invalid state: HorizontalLineTo on emtpy CurrentLine".into(),
+                    ))
                 }
             }
         }
@@ -381,7 +388,9 @@ fn parse_path_segment(
                 (Some(x), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
                 (Some(_), false) => current_line.add_relative(CoordinatePair::new(0.0, y)),
                 (None, _) => {
-                    return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into())
+                    return Err(Error::PathParse(
+                        "Invalid state: VerticalLineTo on emtpy CurrentLine".into(),
+                    ))
                 }
             }
         }
@@ -424,9 +433,12 @@ fn parse_path_segment(
                     let dx = prev_x - prev_x2;
                     let dy = prev_y - prev_y2;
                     let (x1, y1) = if abs {
-                        let current = current_line.last_pair().ok_or(
-                            "Invalid state: CurveTo or SmoothCurveTo on empty CurrentLine",
-                        )?;
+                        let current = current_line.last_pair().ok_or_else(|| {
+                            Error::PathParse(
+                                "Invalid state: CurveTo or SmoothCurveTo on empty CurrentLine"
+                                    .into(),
+                            )
+                        })?;
                         (current.x + dx, current.y + dy)
                     } else {
                         (dx, dy)
@@ -443,9 +455,9 @@ fn parse_path_segment(
                             _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
                         }
                         None => {
-                            return Err(
-                                "Invalid state: SmoothCurveTo without a reference point".into()
-                            )
+                            return Err(Error::PathParse(
+                                "Invalid state: SmoothCurveTo without a reference point".into(),
+                            ))
                         }
                     }
                 }
@@ -453,9 +465,9 @@ fn parse_path_segment(
         }
         &PathSegment::Quadratic { abs, x1, y1, x, y } => {
             trace!("parse_path_segment: Quadratic");
-            let current = current_line
-                .last_pair()
-                .ok_or("Invalid state: Quadratic on empty CurrentLine")?;
+            let current = current_line.last_pair().ok_or_else(|| {
+                Error::PathParse("Invalid state: Quadratic on empty CurrentLine".into())
+            })?;
             let curve = if abs {
                 QuadraticBezierSegment {
                     from: Point2D::new(current.x, current.y),
@@ -477,7 +489,7 @@ fn parse_path_segment(
             trace!("parse_path_segment: ClosePath");
             current_line
                 .close()
-                .map_err(|e| format!("Invalid state: {}", e))?;
+                .map_err(|e| Error::PathParse(format!("Invalid state: {}", e)))?;
         }
         &PathSegment::EllipticalArc {
             abs,
@@ -505,9 +517,9 @@ fn parse_path_segment(
             // required maths in section "F.6 Elliptical arc implementation
             // notes".
             trace!("parse_path_segment: EllipticalArc");
-            let current = current_line
-                .last_pair()
-                .ok_or("Invalid state: EllipticalArc on empty CurrentLine")?;
+            let current = current_line.last_pair().ok_or_else(|| {
+                Error::PathParse("Invalid state: EllipticalArc on empty CurrentLine".into())
+            })?;
             let last_x = current.x;
             let last_y = current.y;
 
@@ -732,7 +744,10 @@ fn parse_path_segment(
             }
         }
         other => {
-            return Err(format!("Unsupported path segment: {:?}", other));
+            return Err(Error::PathParse(format!(
+                "Unsupported path segment: {:?}",
+                other
+            )));
         }
     }
     Ok(())
@@ -743,20 +758,20 @@ fn parse_path_segment(
 /// Only matrix transformations are supported at the moment. (This shouldn't be
 /// an issue, because usvg converts all transformations into matrices.)
 #[allow(clippy::many_single_char_names)]
-fn parse_transform(transform: &str) -> Result<Transform2D<f64, f64, f64>, String> {
+fn parse_transform(transform: &str) -> Result<Transform2D<f64, f64, f64>, Error> {
     // Extract matrix elements from SVG string
     let transform = transform.trim();
     if !transform.starts_with("matrix(") {
-        return Err(format!(
+        return Err(Error::Transform(format!(
             "Only 'matrix' transform supported in transform '{}'",
             transform
-        ));
+        )));
     }
     if !transform.ends_with(')') {
-        return Err(format!(
+        return Err(Error::SvgParse(format!(
             "Missing closing parenthesis in transform '{}'",
             transform
-        ));
+        )));
     }
     let matrix = transform
         .strip_prefix("matrix(")
@@ -769,14 +784,19 @@ fn parse_transform(transform: &str) -> Result<Transform2D<f64, f64, f64>, String
         .split_whitespace()
         .map(str::parse)
         .collect::<Result<Vec<f64>, _>>()
-        .map_err(|_| format!("Invalid matrix coefficients in transform '{}'", transform))?;
+        .map_err(|_| {
+            Error::SvgParse(format!(
+                "Invalid matrix elements in transform '{}'",
+                transform
+            ))
+        })?;
 
     // Convert floats into Transform2D
     let [a, b, c, d, e, f]: [f64; 6] = elements.as_slice().try_into().map_err(|_| {
-        format!(
-            "Invalid number of matrix coefficients in transform '{}'",
+        Error::Transform(format!(
+            "Invalid number of matrix elements in transform '{}'",
             transform
-        )
+        ))
     })?;
     Ok(Transform2D::new(a, b, c, d, e, f))
 }
@@ -794,14 +814,13 @@ fn parse_transform(transform: &str) -> Result<Transform2D<f64, f64, f64>, String
 /// ## Preprocessing
 ///
 /// If `preprocess` is set to `true`,
-pub fn parse(svg: &str, tol: f64, preprocess: bool) -> Result<Vec<Polyline>, String> {
+pub fn parse(svg: &str, tol: f64, preprocess: bool) -> Result<Vec<Polyline>, Error> {
     trace!("parse");
 
     // Preprocess and simplify the SVG using the usvg library
     let svg = if preprocess {
         let usvg_input_options = usvg::Options::default();
-        let usvg_tree = usvg::Tree::from_str(svg, &usvg_input_options.to_ref())
-            .map_err(|e| format!("Could not simplify input SVG with usvg: {}", e))?;
+        let usvg_tree = usvg::Tree::from_str(svg, &usvg_input_options.to_ref())?;
         let usvg_xml_options = usvg::XmlOptions::default();
         usvg_tree.to_string(&usvg_xml_options)
     } else {
@@ -862,16 +881,16 @@ mod tests {
     fn test_current_line_close() {
         let mut line = CurrentLine::new();
         assert_eq!(
-            line.close(),
-            Err("Lines with less than 2 coordinate pairs cannot be closed.".into())
+            line.close().unwrap_err().to_string(),
+            "Polyline error: Lines with less than 2 coordinate pairs cannot be closed.",
         );
         line.add_absolute((1.0, 2.0).into());
         assert_eq!(
-            line.close(),
-            Err("Lines with less than 2 coordinate pairs cannot be closed.".into())
+            line.close().unwrap_err().to_string(),
+            "Polyline error: Lines with less than 2 coordinate pairs cannot be closed.",
         );
         line.add_absolute((2.0, 3.0).into());
-        assert_eq!(line.close(), Ok(()));
+        assert!(line.close().is_ok());
         let finished = line.finish();
         assert_eq!(finished.len(), 3);
         assert_eq!(finished[0], (1.0, 2.0).into());
@@ -1304,8 +1323,8 @@ mod tests {
         .trim();
         let result = parse_xml(input);
         assert_eq!(
-            result.unwrap_err(),
-            "Error when parsing XML: Expecting </svg> found </baa>".to_string()
+            result.unwrap_err().to_string(),
+            "SVG parse error: Expecting </svg> found </baa>",
         );
     }
 
@@ -1412,8 +1431,8 @@ mod tests {
         // |0  1  0|
         // |0  0  1|
         assert_eq!(
-            parse_transform("matrix(1 0 0 1 0 0)"),
-            Ok(Transform2D::identity())
+            parse_transform("matrix(1 0 0 1 0 0)").unwrap(),
+            Transform2D::identity()
         );
 
         // Scaling matrix (expand in X, compress in Y)
@@ -1421,8 +1440,8 @@ mod tests {
         // |0 .5  0|
         // |0  0  1|
         assert_eq!(
-            parse_transform("matrix(2 0 0 0.5 0 0)"),
-            Ok(Transform2D::scale(2.0, 0.5))
+            parse_transform("matrix(2 0 0 0.5 0 0)").unwrap(),
+            Transform2D::scale(2.0, 0.5)
         );
 
         // Translation matrix
@@ -1430,8 +1449,8 @@ mod tests {
         // |0  1 -5|
         // |0  0  1|
         assert_eq!(
-            parse_transform("matrix(1 0 0 1 3 -5.0)"),
-            Ok(Transform2D::translation(3.0, -5.0))
+            parse_transform("matrix(1 0 0 1 3 -5.0)").unwrap(),
+            Transform2D::translation(3.0, -5.0)
         );
     }
 
