@@ -15,11 +15,6 @@ Flattening of Bézier curves is done using the
 **Note: Currently the path style is completely ignored. Only the path itself is
 returned.**
 
-This repository contains the following crate:
-
-- `svg2polylines` contains all the functionality and can be used like a regular
-  Rust library.
-
 
 ## Preview
 
@@ -27,7 +22,6 @@ There is a small preview tool to view the generated polylines. It's simple and
 hacky, but helps to debug stuff.
 
 ```shell
-cd svg2polylines
 cargo run --release --example preview path/to/file.svg
 ```
 
@@ -44,7 +38,7 @@ Signature:
 fn svg2polylines::parse(&str) -> Result<Vec<Polyline>, String>;
 ```
 
-See [`svg2polylines/examples/basic.rs`][example-src] for a full usage example.
+See [`examples/basic.rs`][example-src] for a full usage example.
 
 
 ## FFI
@@ -74,4 +68,4 @@ be dual licensed as above, without any additional terms or conditions.
 [circle-ci-badge]: https://circleci.com/gh/dbrgn/svg2polylines/tree/main.svg?style=shield
 [crates-io]: https://crates.io/crates/svg2polylines
 [crates-io-badge]: https://img.shields.io/crates/v/svg2polylines.svg
-[example-src]: https://github.com/dbrgn/svg2polylines/blob/main/svg2polylines/examples/basic.rs
+[example-src]: https://github.com/dbrgn/svg2polylines/blob/main/examples/basic.rs

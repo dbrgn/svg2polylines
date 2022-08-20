@@ -7,29 +7,29 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v2-cargo-cache-{{ arch }}-{{ .Branch }}
-            - v2-cargo-cache-{{ arch }}
+            - v3-cargo-cache-{{ arch }}-{{ .Branch }}
+            - v3-cargo-cache-{{ arch }}
       - run:
           name: Show versions
           command: rustc --version && cargo --version
       - run:
           name: Build
-          command: cd svg2polylines && cargo build
+          command: cargo build
       - run:
           name: Run tests (regular)
-          command: cd svg2polylines && cargo test
+          command: cargo test
       - run:
           name: Run tests (with serde)
-          command: cd svg2polylines && cargo test --features serde
+          command: cargo test --features serde
       - save_cache:
-          key: v2-cargo-cache-{{ arch }}-{{ .Branch }}
+          key: v3-cargo-cache-{{ arch }}-{{ .Branch }}
           paths:
-            - svg2polylines/target
+            - target
             - /usr/local/cargo
       - save_cache:
-          key: v2-cargo-cache-{{ arch }}
+          key: v3-cargo-cache-{{ arch }}
           paths:
-            - svg2polylines/target
+            - target
             - /usr/local/cargo
   lint:
     docker:
@@ -38,11 +38,11 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v2-cargo-lint-cache
+            - v3-cargo-lint-cache
       - run: rustup component add clippy
-      - run: cd svg2polylines && cargo clippy --all-targets --all-features
+      - run: cargo clippy --all-targets --all-features
       - save_cache:
-          key: v2-cargo-lint-cache
+          key: v3-cargo-lint-cache
           paths:
             - /usr/local/cargo
   rustfmt:
@@ -52,11 +52,11 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v2-cargo-fmt-cache
+            - v3-cargo-fmt-cache
       - run: rustup component add rustfmt
-      - run: cd svg2polylines && cargo fmt -- --check
+      - run: cargo fmt -- --check
       - save_cache:
-          key: v2-cargo-fmt-cache
+          key: v3-cargo-fmt-cache
           paths:
             - /usr/local/cargo
 workflows:
