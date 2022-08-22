@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [Unreleased]
 
 
+## [0.8.0] - 2022-08-22
+
+### Added
+
+- Add support for matrix transformations (#29)
+- Preprocess with `usvg` to support shapes, transformations and more (#29)
+- Preview: Add zoom support with mouse wheel (#28)
+
+### Changed
+
+- Add custom error type (#31)
+
+
 ## [0.7.0] - 2022-06-22
 
 ### Added
