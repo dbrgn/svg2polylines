@@ -6,7 +6,7 @@ repository = "https://github.com/dbrgn/svg2polylines"
 license = "MIT OR Apache-2.0"
 authors = ["Danilo Bargen <mail@dbrgn.ch>"]
 keywords = ["svg", "polyline", "robotics"]
-readme = "../README.md"
+readme = "README.md"
 include = [
     "**/*.rs",
     "Cargo.toml",
