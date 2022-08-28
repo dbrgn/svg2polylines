@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+
+## [0.8.1] - 2022-08-28
+
 ### Added
 
 - Implement `IntoIterator` for `Polyline` and `&Polyline`
@@ -114,7 +117,9 @@ To get the same behavior as before, simply pass in the value `0.15`.
 - Update `svgparser` and `lyon_bezier` libraries
 
 
-[Unreleased]: https://github.com/dbrgn/svg2polylines/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/dbrgn/svg2polylines/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/dbrgn/svg2polylines/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/dbrgn/svg2polylines/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/dbrgn/svg2polylines/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/dbrgn/svg2polylines/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/dbrgn/svg2polylines/compare/v0.5.1...v0.5.2

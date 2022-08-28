@@ -1,9 +1,5 @@
 # Releasing
 
-Cd into directory:
-
-    $ cd svg2polylines
-
 Run linting:
 
     $ cargo clean && cargo clippy --all-targets --all-features
