@@ -156,6 +156,14 @@ impl IntoIterator for Polyline {
     }
 }
 
+impl<'a> IntoIterator for &'a Polyline {
+    type Item = &'a CoordinatePair;
+    type IntoIter = std::slice::Iter<'a, CoordinatePair>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct CurrentLine {
     /// The polyline containing the coordinate pairs for the current line.
@@ -1515,6 +1523,9 @@ mod tests {
             CoordinatePair { x: 1.0, y: 0.0 },
         ]);
         // Ensure that a polyline can be iterated
+        for pair in &polyline {
+            let _ = pair.x + pair.y;
+        }
         for pair in polyline {
             let _ = pair.x + pair.y;
         }

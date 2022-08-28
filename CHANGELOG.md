@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
-- Implement `IntoIterator` for `Polyline`
+- Implement `IntoIterator` for `Polyline` and `&Polyline`
 
 
 ## [0.8.0] - 2022-08-22
