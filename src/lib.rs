@@ -1360,13 +1360,13 @@ mod tests {
             Polyline(vec![
                 CoordinatePair::new(0.10650371, 93.221877),
                 CoordinatePair::new(1.294403614814815, 91.96472118518521),
-                CoordinatePair::new(2.6361703106158485, 90.93256152046511),
+                CoordinatePair::new(2.6361703106158494, 90.93256152046511),
                 CoordinatePair::new(4.620522695185185, 89.9354544814815),
                 CoordinatePair::new(6.885789998771603, 89.45353374978681),
                 CoordinatePair::new(9.72849, 89.74737800000001),
                 CoordinatePair::new(12.196509552744402, 90.92131377228664),
                 CoordinatePair::new(13.450575259259264, 92.33098488888892),
-                CoordinatePair::new(14.083775088013303, 94.01611039126513),
+                CoordinatePair::new(14.083775088013304, 94.01611039126513),
                 CoordinatePair::new(14.20291140740741, 95.44912911111113),
                 CoordinatePair::new(14.004928, 96.96365600000001),
             ])
