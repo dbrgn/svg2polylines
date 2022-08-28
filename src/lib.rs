@@ -104,23 +104,6 @@ impl Polyline {
         self
     }
 
-    /// Push a [`CoordinatePair`] to the end of the polyline.
-    fn push(&mut self, val: CoordinatePair) {
-        self.0.push(val);
-    }
-
-    /// Number of [`CoordinatePair`]s in this polyline.
-    #[must_use]
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Last [`CoordinatePair`] of this polyline.
-    #[must_use]
-    fn last(&self) -> Option<&CoordinatePair> {
-        self.0.last()
-    }
-
     /// Unwrap and return the inner vector.
     #[must_use]
     pub fn unwrap(self) -> Vec<CoordinatePair> {
@@ -161,6 +144,19 @@ impl<'a> IntoIterator for &'a Polyline {
     type IntoIter = std::slice::Iter<'a, CoordinatePair>;
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
+    }
+}
+
+impl std::ops::Deref for Polyline {
+    type Target = Vec<CoordinatePair>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Polyline {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -1529,5 +1525,16 @@ mod tests {
         for pair in polyline {
             let _ = pair.x + pair.y;
         }
+    }
+
+    #[test]
+    fn test_polyline_deref() {
+        let polyline = Polyline(vec![
+            CoordinatePair { x: 0.0, y: 1.0 },
+            CoordinatePair { x: 1.0, y: 0.0 },
+        ]);
+        // A polyline should deref to the underlying vec
+        let _empty = polyline.is_empty();
+        let _empty = (&polyline).is_empty();
     }
 }
