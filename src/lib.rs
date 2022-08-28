@@ -148,6 +148,14 @@ impl Index<usize> for Polyline {
     }
 }
 
+impl IntoIterator for Polyline {
+    type Item = CoordinatePair;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct CurrentLine {
     /// The polyline containing the coordinate pairs for the current line.
@@ -1498,5 +1506,17 @@ mod tests {
         assert_eq!(result[0].len(), 2);
         assert_eq!(result[0][0], (3., -3.).into());
         assert_eq!(result[0][1], (4., -2.).into());
+    }
+
+    #[test]
+    fn test_polyline_iterate() {
+        let polyline = Polyline(vec![
+            CoordinatePair { x: 0.0, y: 1.0 },
+            CoordinatePair { x: 1.0, y: 0.0 },
+        ]);
+        // Ensure that a polyline can be iterated
+        for pair in polyline {
+            let _ = pair.x + pair.y;
+        }
     }
 }
