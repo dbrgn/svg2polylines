@@ -28,7 +28,7 @@ fn main() {
     file.read_to_string(&mut s).unwrap();
 
     // Parse data
-    let polylines: Vec<Polyline> = svg2polylines::parse(&s, 0.15, true).unwrap_or_else(|e| {
+    let polylines: Vec<(Option<String>, Polyline)> = svg2polylines::parse(&s, 0.15, true).unwrap_or_else(|e| {
         println!("Error: {}", e);
         exit(2);
     });
@@ -91,7 +91,7 @@ fn main() {
         // Redraw
         window.draw_2d(&e, |ctx, g, _device| {
             clear([1.0; 4], g);
-            for polyline in &polylines {
+            for (_id, polyline) in &polylines {
                 for pair in polyline.as_ref().windows(2) {
                     line(
                         black,

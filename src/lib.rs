@@ -251,7 +251,7 @@ impl CurrentLine {
 
 /// Parse an SVG string, return vector of `(path expression, transform
 /// expression)` tuples.
-fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
+fn parse_xml(svg: &str) -> Result<Vec<(Option<String>, String, Option<String>)>, Error> {
     trace!("parse_xml");
 
     let mut reader = quick_xml::Reader::from_str(svg);
@@ -266,6 +266,7 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
                 match e.name() {
                     b"path" => {
                         trace!("parse_xml: Found path element");
+                        let mut id_expr: Option<String> = None;
                         let mut path_expr: Option<String> = None;
                         let mut transform_expr: Option<String> = None;
                         for attr in e.attributes().filter_map(Result::ok) {
@@ -275,13 +276,14 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
                                     .and_then(|v| str::from_utf8(&v).map(str::to_string).ok())
                             };
                             match attr.key {
+                                b"id" => id_expr = extract(),
                                 b"d" => path_expr = extract(),
                                 b"transform" => transform_expr = extract(),
                                 _ => {}
                             }
                         }
                         if let Some(expr) = path_expr {
-                            paths.push((expr, transform_expr));
+                            paths.push((id_expr, expr, transform_expr));
                         }
                     }
                     _ => {}
@@ -826,7 +828,7 @@ fn parse_transform(transform: &str) -> Result<Transform2D<f64, f64, f64>, Error>
 /// ## Preprocessing
 ///
 /// If `preprocess` is set to `true`,
-pub fn parse(svg: &str, tol: f64, preprocess: bool) -> Result<Vec<Polyline>, Error> {
+pub fn parse(svg: &str, tol: f64, preprocess: bool) -> Result<Vec<(Option<String>, Polyline)>, Error> {
     trace!("parse");
 
     // Preprocess and simplify the SVG using the usvg library
@@ -844,16 +846,16 @@ pub fn parse(svg: &str, tol: f64, preprocess: bool) -> Result<Vec<Polyline>, Err
     trace!("parse: Found {} path expressions", path_exprs.len());
 
     // Vector that will hold resulting polylines
-    let mut polylines: Vec<Polyline> = Vec::new();
+    let mut polylines: Vec<(Option<String>, Polyline)> = Vec::new();
 
     // Process path expressions
-    for (path_expr, transform_expr) in path_exprs {
+    for (id_expr, path_expr, transform_expr) in path_exprs {
         let path = parse_path(&path_expr, tol)?;
         if let Some(e) = transform_expr {
             let t = parse_transform(&e)?;
-            polylines.extend(path.into_iter().map(|polyline| polyline.transform(t)));
+            polylines.extend(path.into_iter().map(|polyline| (id_expr.clone(), polyline.transform(t))));
         } else {
-            polylines.extend(path);
+            polylines.extend(path.into_iter().map(|polyline| (id_expr.clone(), polyline)));
         }
     }
 
@@ -1142,11 +1144,11 @@ mod tests {
         .trim();
         let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].len(), 4);
-        assert_eq!(result[0][0], (113., 35.).into());
-        assert_eq!(result[0][1], (40., 35.).into());
-        assert_eq!(result[0][2], (-39., 49.).into());
-        assert_eq!(result[0][3], (40., 49.).into());
+        assert_eq!(result[0].1.len(), 4);
+        assert_eq!(result[0].1[0], (113., 35.).into());
+        assert_eq!(result[0].1[1], (40., 35.).into());
+        assert_eq!(result[0].1[2], (-39., 49.).into());
+        assert_eq!(result[0].1[3], (40., 49.).into());
     }
 
     #[test]
@@ -1161,11 +1163,11 @@ mod tests {
         .trim();
         let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].len(), 4);
-        assert_eq!(result[0][0], (10., 10.).into());
-        assert_eq!(result[0][1], (20., 15.).into());
-        assert_eq!(result[0][2], (10., 20.).into());
-        assert_eq!(result[0][3], (10., 10.).into());
+        assert_eq!(result[0].1.len(), 4);
+        assert_eq!(result[0].1[0], (10., 10.).into());
+        assert_eq!(result[0].1[1], (20., 15.).into());
+        assert_eq!(result[0].1[2], (10., 20.).into());
+        assert_eq!(result[0].1[3], (10., 10.).into());
     }
 
     #[cfg(feature = "use_serde")]
@@ -1189,15 +1191,15 @@ mod tests {
         let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 2);
 
-        assert_eq!(result[0].len(), 4);
-        assert_eq!(result[0][0], (10., 10.).into());
-        assert_eq!(result[0][1], (20., 15.).into());
-        assert_eq!(result[0][2], (10., 20.).into());
-        assert_eq!(result[0][3], (10., 10.).into());
+        assert_eq!(result[0].1.len(), 4);
+        assert_eq!(result[0].1[0], (10., 10.).into());
+        assert_eq!(result[0].1[1], (20., 15.).into());
+        assert_eq!(result[0].1[2], (10., 20.).into());
+        assert_eq!(result[0].1[3], (10., 10.).into());
 
-        assert_eq!(result[1].len(), 2);
-        assert_eq!(result[1][0], (10., 50.).into());
-        assert_eq!(result[1][1], (0., 50.).into());
+        assert_eq!(result[1].1.len(), 2);
+        assert_eq!(result[1].1[0], (10., 50.).into());
+        assert_eq!(result[1].1[1], (0., 50.).into());
     }
 
     #[test]
@@ -1216,15 +1218,15 @@ mod tests {
         assert_eq!(result.len(), 2);
 
         // First line has three points
-        assert_eq!(result[0].len(), 3);
-        assert_eq!(result[0][0], (10., 100.).into());
-        assert_eq!(result[0][1], (40., 70.).into());
-        assert_eq!(result[0][2], (50., 70.).into());
+        assert_eq!(result[0].1.len(), 3);
+        assert_eq!(result[0].1[0], (10., 100.).into());
+        assert_eq!(result[0].1[1], (40., 70.).into());
+        assert_eq!(result[0].1[2], (50., 70.).into());
 
         // First line has two points
-        assert_eq!(result[1].len(), 2);
-        assert_eq!(result[1][0], (30., 110.).into());
-        assert_eq!(result[1][1], (40., 90.).into());
+        assert_eq!(result[1].1.len(), 2);
+        assert_eq!(result[1].1[0], (30., 110.).into());
+        assert_eq!(result[1].1[1], (40., 90.).into());
     }
 
     #[test]
@@ -1260,7 +1262,7 @@ mod tests {
         let result = parse_xml(input).unwrap();
         assert_eq!(
             result,
-            vec![("M 10,100 40,70 h 10 m -20,40 10,-20".to_string(), None)]
+            vec![(None, "M 10,100 40,70 h 10 m -20,40 10,-20".to_string(), None)]
         );
     }
 
@@ -1279,8 +1281,8 @@ mod tests {
         assert_eq!(
             result,
             vec![
-                ("M 10,100 40,70 h 10 m -20,40 10,-20".to_string(), None),
-                ("M 20,30".to_string(), None),
+                (None, "M 10,100 40,70 h 10 m -20,40 10,-20".to_string(), None),
+                (None, "M 20,30".to_string(), None),
             ]
         );
     }
@@ -1297,7 +1299,7 @@ mod tests {
         "#
         .trim();
         let result = parse_xml(input).unwrap();
-        assert_eq!(result, vec![("M 20,30".to_string(), None)]);
+        assert_eq!(result, vec![(None, "M 20,30".to_string(), None)]);
     }
 
     #[test]
@@ -1316,10 +1318,11 @@ mod tests {
             result,
             vec![
                 (
+                    None,
                     "M 20,30".to_string(),
                     Some("matrix(1 0 0 1 0 0)".to_string())
                 ),
-                ("M 30,40".to_string(), None)
+                (None, "M 30,40".to_string(), None)
             ],
         );
     }
@@ -1354,9 +1357,9 @@ mod tests {
         "#.trim();
         let result = parse(input, FLATTENING_TOLERANCE, false).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].len(), 11);
+        assert_eq!(result[0].1.len(), 11);
         assert_eq!(
-            result[0],
+            result[0].1,
             Polyline(vec![
                 CoordinatePair::new(0.10650371, 93.221877),
                 CoordinatePair::new(1.294403614814815, 91.96472118518521),
@@ -1389,9 +1392,9 @@ mod tests {
         .trim();
         let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].len(), 39);
+        assert_eq!(result[0].1.len(), 39);
         assert_eq!(
-            result[0],
+            result[0].1,
             Polyline(vec![
                 CoordinatePair::new(10.0, 80.0),
                 CoordinatePair::new(15.78100143969477, 67.25459368406422),
@@ -1488,9 +1491,9 @@ mod tests {
         .trim();
         let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].len(), 2);
-        assert_eq!(result[0][0], (3., -3.).into());
-        assert_eq!(result[0][1], (4., -2.).into());
+        assert_eq!(result[0].1.len(), 2);
+        assert_eq!(result[0].1[0], (3., -3.).into());
+        assert_eq!(result[0].1[1], (4., -2.).into());
     }
 
     // Like `test_apply_transformation_matrix`, but with discrete
@@ -1507,9 +1510,9 @@ mod tests {
         .trim();
         let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].len(), 2);
-        assert_eq!(result[0][0], (3., -3.).into());
-        assert_eq!(result[0][1], (4., -2.).into());
+        assert_eq!(result[0].1.len(), 2);
+        assert_eq!(result[0].1[0], (3., -3.).into());
+        assert_eq!(result[0].1[1], (4., -2.).into());
     }
 
     #[test]
