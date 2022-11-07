@@ -1528,6 +1528,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::needless_borrow)]
     fn test_polyline_deref() {
         let polyline = Polyline(vec![
             CoordinatePair { x: 0.0, y: 1.0 },
