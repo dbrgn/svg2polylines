@@ -31,5 +31,5 @@ usvg = "0.23"
 [dev-dependencies]
 env_logger = "0.11"
 serde_json = "1"
-piston_window = "0.124"
+piston_window = "0.132"
 piston2d-drag_controller = "0.30"
