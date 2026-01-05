@@ -2,13 +2,13 @@ version: 2
 jobs:
   test:
     docker:
-      - image: rust:1.82.0
+      - image: rust:1.92.0
     steps:
       - checkout
       - restore_cache:
           keys:
-            - v3-cargo-cache-{{ arch }}-{{ .Branch }}
-            - v3-cargo-cache-{{ arch }}
+            - v4-cargo-cache-{{ arch }}-{{ .Branch }}
+            - v4-cargo-cache-{{ arch }}
       - run:
           name: Show versions
           command: rustc --version && cargo --version
@@ -22,41 +22,41 @@ jobs:
           name: Run tests (with serde)
           command: cargo test --features serde
       - save_cache:
-          key: v3-cargo-cache-{{ arch }}-{{ .Branch }}
+          key: v4-cargo-cache-{{ arch }}-{{ .Branch }}
           paths:
             - target
             - /usr/local/cargo
       - save_cache:
-          key: v3-cargo-cache-{{ arch }}
+          key: v4-cargo-cache-{{ arch }}
           paths:
             - target
             - /usr/local/cargo
   lint:
     docker:
-      - image: rust:1.82.0
+      - image: rust:1.92.0
     steps:
       - checkout
       - restore_cache:
           keys:
-            - v3-cargo-lint-cache
+            - v4-cargo-lint-cache
       - run: rustup component add clippy
       - run: cargo clippy --all-targets --all-features
       - save_cache:
-          key: v3-cargo-lint-cache
+          key: v4-cargo-lint-cache
           paths:
             - /usr/local/cargo
   rustfmt:
     docker:
-      - image: rust:1.82.0
+      - image: rust:1.92.0
     steps:
       - checkout
       - restore_cache:
           keys:
-            - v3-cargo-fmt-cache
+            - v4-cargo-fmt-cache
       - run: rustup component add rustfmt
       - run: cargo fmt -- --check
       - save_cache:
-          key: v3-cargo-fmt-cache
+          key: v4-cargo-fmt-cache
           paths:
             - /usr/local/cargo
 workflows:
