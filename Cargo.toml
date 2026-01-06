@@ -24,7 +24,7 @@ log = "^0.4"
 lyon_geom = "1"
 quick-xml = "0.38"
 serde = { version = "1.0", optional = true, features = ["derive"] }
-svgtypes = "0.8"
+svgtypes = "0.16"
 thiserror = "1"
 usvg = "0.23"
 
