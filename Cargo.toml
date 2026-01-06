@@ -25,7 +25,7 @@ lyon_geom = "1"
 quick-xml = "0.38"
 serde = { version = "1.0", optional = true, features = ["derive"] }
 svgtypes = "0.16"
-thiserror = "1"
+thiserror = "2"
 usvg = "0.23"
 
 [dev-dependencies]
