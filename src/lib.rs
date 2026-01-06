@@ -255,26 +255,21 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
     trace!("parse_xml");
 
     let mut reader = quick_xml::Reader::from_str(svg);
-    reader.trim_text(true);
+    reader.config_mut().trim_text(true);
 
     let mut paths = Vec::new();
-    let mut buf = Vec::new();
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event() {
             Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
                 trace!("parse_xml: Matched start of {:?}", e.name());
-                match e.name() {
+                match e.name().as_ref() {
                     b"path" => {
                         trace!("parse_xml: Found path element");
                         let mut path_expr: Option<String> = None;
                         let mut transform_expr: Option<String> = None;
                         for attr in e.attributes().filter_map(Result::ok) {
-                            let extract = || {
-                                attr.unescaped_value()
-                                    .ok()
-                                    .and_then(|v| str::from_utf8(&v).map(str::to_string).ok())
-                            };
-                            match attr.key {
+                            let extract = || attr.unescape_value().ok().map(|v| v.to_string());
+                            match attr.key.as_ref() {
                                 b"d" => path_expr = extract(),
                                 b"transform" => transform_expr = extract(),
                                 _ => {}
@@ -294,9 +289,6 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
             Ok(_) => {}
             Err(e) => return Err(Error::SvgParse(e.to_string())),
         }
-
-        // If we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
-        buf.clear();
     }
     trace!("parse_xml: Return {} paths", paths.len());
     Ok(paths)
@@ -1336,7 +1328,7 @@ mod tests {
         let result = parse_xml(input);
         assert_eq!(
             result.unwrap_err().to_string(),
-            "SVG parse error: Expecting </svg> found </baa>",
+            "SVG parse error: ill-formed document: expected `</svg>`, but `</baa>` was found",
         );
     }
 
