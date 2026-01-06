@@ -317,7 +317,7 @@ fn parse_path(expr: &str, tol: f64) -> Result<Vec<Polyline>, Error> {
 
 /// Helper method for parsing both `CurveTo` and `SmoothCurveTo`.
 #[allow(clippy::too_many_arguments)]
-fn _handle_cubic_curve(
+fn handle_cubic_curve(
     current_line: &mut CurrentLine,
     tol: f64,
     abs: bool,
@@ -408,7 +408,7 @@ fn parse_path_segment(
             y,
         } => {
             trace!("parse_path_segment: CurveTo");
-            _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
+            handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
         }
         &PathSegment::SmoothCurveTo { abs, x2, y2, x, y } => {
             trace!("parse_path_segment: SmoothCurveTo");
@@ -447,7 +447,7 @@ fn parse_path_segment(
                     } else {
                         (dx, dy)
                     };
-                    _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
+                    handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
                 }
                 Some(_) | None => {
                     // The previous segment was not a curve. Use the current
@@ -456,7 +456,7 @@ fn parse_path_segment(
                         Some(pair) => {
                             let x1 = pair.x;
                             let y1 = pair.y;
-                            _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
+                            handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
                         }
                         None => {
                             return Err(Error::PathParse(
