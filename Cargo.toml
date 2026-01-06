@@ -32,7 +32,7 @@ usvg = "0.23"
 env_logger = "0.11"
 insta = { version = "1", features = ["yaml"] }
 serde_json = "1"
-piston_window = "0.132"
+piston_window = "0.146"
 piston2d-drag_controller = "0.30"
 
 [profile.dev.package]
