@@ -1168,7 +1168,7 @@ mod tests {
         assert_eq!(result[0][3], (10., 10.).into());
     }
 
-    #[cfg(feature = "use_serde")]
+    #[cfg(feature = "serde")]
     #[test]
     fn test_serde() {
         let cp = CoordinatePair::new(10.0, 20.0);
