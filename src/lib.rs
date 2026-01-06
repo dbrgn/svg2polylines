@@ -258,11 +258,26 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
     reader.config_mut().trim_text(true);
 
     let mut paths = Vec::new();
+
+    // Stack to track transforms from parent group elements
+    let mut transform_stack: Vec<Option<String>> = Vec::new();
+
     loop {
         match reader.read_event() {
-            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+            Ok(Event::Start(ref e)) => {
                 trace!("parse_xml: Matched start of {:?}", e.name());
                 match e.name().as_ref() {
+                    b"g" => {
+                        // Track transform from group element
+                        let mut group_transform: Option<String> = None;
+                        for attr in e.attributes().filter_map(Result::ok) {
+                            if attr.key.as_ref() == b"transform" {
+                                group_transform = attr.unescape_value().ok().map(|v| v.to_string());
+                                break;
+                            }
+                        }
+                        transform_stack.push(group_transform);
+                    }
                     b"path" => {
                         trace!("parse_xml: Found path element");
                         let mut path_expr: Option<String> = None;
@@ -275,11 +290,40 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
                                 _ => {}
                             }
                         }
+                        // Combine with parent group transform if present
+                        let effective_transform =
+                            combine_transforms(&transform_stack, transform_expr);
                         if let Some(expr) = path_expr {
-                            paths.push((expr, transform_expr));
+                            paths.push((expr, effective_transform));
                         }
                     }
                     _ => {}
+                }
+            }
+            Ok(Event::Empty(ref e)) => {
+                trace!("parse_xml: Matched empty element {:?}", e.name());
+                if e.name().as_ref() == b"path" {
+                    trace!("parse_xml: Found path element");
+                    let mut path_expr: Option<String> = None;
+                    let mut transform_expr: Option<String> = None;
+                    for attr in e.attributes().filter_map(Result::ok) {
+                        let extract = || attr.unescape_value().ok().map(|v| v.to_string());
+                        match attr.key.as_ref() {
+                            b"d" => path_expr = extract(),
+                            b"transform" => transform_expr = extract(),
+                            _ => {}
+                        }
+                    }
+                    // Combine with parent group transform if present
+                    let effective_transform = combine_transforms(&transform_stack, transform_expr);
+                    if let Some(expr) = path_expr {
+                        paths.push((expr, effective_transform));
+                    }
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if e.name().as_ref() == b"g" {
+                    transform_stack.pop();
                 }
             }
             Ok(Event::Eof) => {
@@ -292,6 +336,40 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
     }
     trace!("parse_xml: Return {} paths", paths.len());
     Ok(paths)
+}
+
+/// Combine transforms from parent groups with path's own transform.
+/// Returns the combined transform string in matrix form, or None if no transforms.
+fn combine_transforms(
+    transform_stack: &[Option<String>],
+    path_transform: Option<String>,
+) -> Option<String> {
+    // Collect all transforms (from outermost group to path)
+    let mut transforms: Vec<&str> = transform_stack
+        .iter()
+        .filter_map(|t| t.as_deref())
+        .collect();
+    if let Some(ref t) = path_transform {
+        transforms.push(t);
+    }
+
+    if transforms.is_empty() {
+        return None;
+    }
+
+    // Parse and multiply all transforms
+    let mut result: Transform2D<f64, f64, f64> = Transform2D::identity();
+    for transform_str in transforms {
+        if let Ok(t) = parse_transform(transform_str) {
+            result = result.then(&t);
+        }
+    }
+
+    // Return as matrix string
+    Some(format!(
+        "matrix({} {} {} {} {} {})",
+        result.m11, result.m12, result.m21, result.m22, result.m31, result.m32
+    ))
 }
 
 fn parse_path(expr: &str, tol: f64) -> Result<Vec<Polyline>, Error> {
@@ -824,9 +902,9 @@ pub fn parse(svg: &str, tol: f64, preprocess: bool) -> Result<Vec<Polyline>, Err
     // Preprocess and simplify the SVG using the usvg library
     let svg = if preprocess {
         let usvg_input_options = usvg::Options::default();
-        let usvg_tree = usvg::Tree::from_str(svg, &usvg_input_options.to_ref())?;
-        let usvg_xml_options = usvg::XmlOptions::default();
-        usvg_tree.to_string(&usvg_xml_options)
+        let usvg_tree = usvg::Tree::from_str(svg, &usvg_input_options)?;
+        let usvg_write_options = usvg::WriteOptions::default();
+        usvg_tree.to_string(&usvg_write_options)
     } else {
         svg.to_string()
     };
