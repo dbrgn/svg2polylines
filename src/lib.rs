@@ -255,26 +255,21 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
     trace!("parse_xml");
 
     let mut reader = quick_xml::Reader::from_str(svg);
-    reader.trim_text(true);
+    reader.config_mut().trim_text(true);
 
     let mut paths = Vec::new();
-    let mut buf = Vec::new();
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event() {
             Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
                 trace!("parse_xml: Matched start of {:?}", e.name());
-                match e.name() {
+                match e.name().as_ref() {
                     b"path" => {
                         trace!("parse_xml: Found path element");
                         let mut path_expr: Option<String> = None;
                         let mut transform_expr: Option<String> = None;
                         for attr in e.attributes().filter_map(Result::ok) {
-                            let extract = || {
-                                attr.unescaped_value()
-                                    .ok()
-                                    .and_then(|v| str::from_utf8(&v).map(str::to_string).ok())
-                            };
-                            match attr.key {
+                            let extract = || attr.unescape_value().ok().map(|v| v.to_string());
+                            match attr.key.as_ref() {
                                 b"d" => path_expr = extract(),
                                 b"transform" => transform_expr = extract(),
                                 _ => {}
@@ -294,9 +289,6 @@ fn parse_xml(svg: &str) -> Result<Vec<(String, Option<String>)>, Error> {
             Ok(_) => {}
             Err(e) => return Err(Error::SvgParse(e.to_string())),
         }
-
-        // If we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
-        buf.clear();
     }
     trace!("parse_xml: Return {} paths", paths.len());
     Ok(paths)
@@ -325,7 +317,7 @@ fn parse_path(expr: &str, tol: f64) -> Result<Vec<Polyline>, Error> {
 
 /// Helper method for parsing both `CurveTo` and `SmoothCurveTo`.
 #[allow(clippy::too_many_arguments)]
-fn _handle_cubic_curve(
+fn handle_cubic_curve(
     current_line: &mut CurrentLine,
     tol: f64,
     abs: bool,
@@ -416,7 +408,7 @@ fn parse_path_segment(
             y,
         } => {
             trace!("parse_path_segment: CurveTo");
-            _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
+            handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
         }
         &PathSegment::SmoothCurveTo { abs, x2, y2, x, y } => {
             trace!("parse_path_segment: SmoothCurveTo");
@@ -455,7 +447,7 @@ fn parse_path_segment(
                     } else {
                         (dx, dy)
                     };
-                    _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
+                    handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
                 }
                 Some(_) | None => {
                     // The previous segment was not a curve. Use the current
@@ -464,7 +456,7 @@ fn parse_path_segment(
                         Some(pair) => {
                             let x1 = pair.x;
                             let y1 = pair.y;
-                            _handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
+                            handle_cubic_curve(current_line, tol, abs, x1, y1, x2, y2, x, y)?;
                         }
                         None => {
                             return Err(Error::PathParse(
@@ -1168,7 +1160,7 @@ mod tests {
         assert_eq!(result[0][3], (10., 10.).into());
     }
 
-    #[cfg(feature = "use_serde")]
+    #[cfg(feature = "serde")]
     #[test]
     fn test_serde() {
         let cp = CoordinatePair::new(10.0, 20.0);
@@ -1336,7 +1328,7 @@ mod tests {
         let result = parse_xml(input);
         assert_eq!(
             result.unwrap_err().to_string(),
-            "SVG parse error: Expecting </svg> found </baa>",
+            "SVG parse error: ill-formed document: expected `</svg>`, but `</baa>` was found",
         );
     }
 
@@ -1353,24 +1345,7 @@ mod tests {
             </svg>
         "#.trim();
         let result = parse(input, FLATTENING_TOLERANCE, false).unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].len(), 11);
-        assert_eq!(
-            result[0],
-            Polyline(vec![
-                CoordinatePair::new(0.10650371, 93.221877),
-                CoordinatePair::new(1.294403614814815, 91.96472118518521),
-                CoordinatePair::new(2.6361703106158494, 90.93256152046511),
-                CoordinatePair::new(4.620522695185185, 89.9354544814815),
-                CoordinatePair::new(6.885789998771603, 89.45353374978681),
-                CoordinatePair::new(9.72849, 89.74737800000001),
-                CoordinatePair::new(12.196509552744402, 90.92131377228664),
-                CoordinatePair::new(13.450575259259264, 92.33098488888892),
-                CoordinatePair::new(14.083775088013304, 94.01611039126513),
-                CoordinatePair::new(14.20291140740741, 95.44912911111113),
-                CoordinatePair::new(14.004928, 96.96365600000001),
-            ])
-        );
+        insta::assert_debug_snapshot!(result);
     }
 
     /// Test the flattening of a mirrored cubic curve (also called "smooth
@@ -1388,52 +1363,7 @@ mod tests {
         "#
         .trim();
         let result = parse(input, FLATTENING_TOLERANCE, true).unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].len(), 39);
-        assert_eq!(
-            result[0],
-            Polyline(vec![
-                CoordinatePair::new(10.0, 80.0),
-                CoordinatePair::new(15.78100143969477, 67.25459368406422),
-                CoordinatePair::new(21.112891508939025, 56.89021833666841),
-                CoordinatePair::new(26.03493691503612, 48.59336957163201),
-                CoordinatePair::new(30.583422438239403, 42.07406572971166),
-                CoordinatePair::new(34.79388507225312, 37.06697733757036),
-                CoordinatePair::new(38.70370370370371, 33.333333333333336),
-                CoordinatePair::new(42.88612651359071, 30.34239438296855),
-                CoordinatePair::new(46.831649509423386, 28.490212691725404),
-                CoordinatePair::new(50.627640135655845, 27.608152315837724),
-                CoordinatePair::new(54.37235986434414, 27.608152315837728),
-                CoordinatePair::new(58.168350490576614, 28.490212691725404),
-                CoordinatePair::new(62.113873486409275, 30.342394382968557),
-                CoordinatePair::new(66.2962962962963, 33.33333333333333),
-                CoordinatePair::new(70.20611492774688, 37.06697733757035),
-                CoordinatePair::new(74.41657756176059, 42.07406572971165),
-                CoordinatePair::new(78.96506308496389, 48.593369571632),
-                CoordinatePair::new(83.88710849106097, 56.89021833666841),
-                CoordinatePair::new(89.21899856030524, 67.2545936840642),
-                CoordinatePair::new(95.0, 80.0),
-                CoordinatePair::new(100.78100143969478, 92.7454063159358),
-                CoordinatePair::new(106.112891508939, 103.10978166333157),
-                CoordinatePair::new(111.03493691503611, 111.40663042836799),
-                CoordinatePair::new(115.58342243823941, 117.92593427028837),
-                CoordinatePair::new(119.79388507225313, 122.93302266242966),
-                CoordinatePair::new(123.70370370370371, 126.66666666666669),
-                CoordinatePair::new(127.88612651359071, 129.65760561703146),
-                CoordinatePair::new(131.83164950942339, 131.50978730827458),
-                CoordinatePair::new(135.62764013565584, 132.39184768416223),
-                CoordinatePair::new(139.37235986434416, 132.3918476841623),
-                CoordinatePair::new(143.16835049057661, 131.50978730827458),
-                CoordinatePair::new(147.1138734864093, 129.65760561703146),
-                CoordinatePair::new(151.2962962962963, 126.66666666666666),
-                CoordinatePair::new(155.2061149277469, 122.93302266242966),
-                CoordinatePair::new(159.4165775617606, 117.92593427028835),
-                CoordinatePair::new(163.9650630849639, 111.40663042836802),
-                CoordinatePair::new(168.88710849106099, 103.1097816633316),
-                CoordinatePair::new(174.21899856030524, 92.74540631593578),
-                CoordinatePair::new(180.0, 80.0),
-            ])
-        );
+        insta::assert_debug_snapshot!(result);
     }
 
     #[test]

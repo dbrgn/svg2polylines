@@ -4,7 +4,8 @@ use std::{env, fs, io::Read, process::exit};
 
 use drag_controller::{Drag, DragController};
 use piston_window::{
-    clear, line, math::Matrix2d, Event, Input, Motion, PistonWindow, Transformed, WindowSettings,
+    graphics::{clear, line, math::Matrix2d, Transformed},
+    Event, Input, Motion, PistonWindow, WindowSettings,
 };
 use svg2polylines::{self, Polyline};
 
